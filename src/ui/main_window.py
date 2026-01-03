@@ -28,8 +28,7 @@ class MainWindow(Adw.Application):
         self.wallhaven_service = WallhavenService(api_key=api_key)
 
         local_dir = self.config.get("local_wallpapers_dir")
-        if local_dir:
-            local_dir = Path(local_dir)
+        local_dir = Path(local_dir) if local_dir else None
         self.local_service = LocalWallpaperService(pictures_dir=local_dir)
 
         self.wallpaper_setter = WallpaperSetter()
@@ -70,6 +69,13 @@ class WallPickerWindow(Adw.ApplicationWindow):
         if symlink.exists() and symlink.is_symlink():
             return str(symlink.resolve())
         return None
+
+    def _get_current_local_dir_name(self):
+        app = Gtk.Application.get_default()
+        local_dir = app.local_service.get_pictures_dir()
+        if local_dir == Path.home() / "Pictures":
+            return "Pictures (default)"
+        return str(local_dir)
 
     def _setup_css(self):
         css = b"""
@@ -314,6 +320,30 @@ class WallPickerWindow(Adw.ApplicationWindow):
         parent.append(self.wallhaven_status)
 
     def _create_local_ui(self, parent):
+        toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        toolbar.set_margin_top(8)
+        toolbar.set_margin_bottom(8)
+        toolbar.set_margin_start(12)
+        toolbar.set_margin_end(12)
+
+        self.local_dir_label = Gtk.Label(label=self._get_current_local_dir_name())
+        self.local_dir_label.set_halign(Gtk.Align.START)
+        self.local_dir_label.set_ellipsize(3)
+        toolbar.append(self.local_dir_label)
+
+        dir_btn = Gtk.Button(
+            icon_name="folder-open-symbolic",
+            tooltip_text="Change wallpaper directory",
+        )
+        dir_btn.connect("clicked", self._on_change_local_directory)
+        toolbar.append(dir_btn)
+
+        spacer = Gtk.Label()
+        spacer.set_hexpand(True)
+        toolbar.append(spacer)
+
+        parent.append(toolbar)
+
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
 
@@ -964,3 +994,29 @@ class WallPickerWindow(Adw.ApplicationWindow):
                 "Failed to Delete Wallpaper",
                 "There was an error deleting the local wallpaper.",
             )
+
+    def _on_change_local_directory(self, button):
+        dialog = Gtk.FileDialog(title="Select Wallpaper Directory")
+        dialog.set_modal(True)
+
+        app = Gtk.Application.get_default()
+
+        def on_folder_selected(dialog, result):
+            try:
+                selected_folder = dialog.select_folder_finish(result)
+                if selected_folder:
+                    folder_path = selected_folder.get_path()
+                    if folder_path:
+                        app.config.set("local_wallpapers_dir", folder_path)
+                        new_dir = Path(folder_path)
+                        app.local_service.pictures_dir = new_dir
+                        self.local_dir_label.set_text(str(new_dir))
+                        self._load_local_wallpapers()
+                        self._send_notification(
+                            "Directory Changed",
+                            f"Wallpaper directory changed to {folder_path}",
+                        )
+            except GLib.GError:
+                pass
+
+        dialog.select_folder(self, None, on_folder_selected)

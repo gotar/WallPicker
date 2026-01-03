@@ -9,7 +9,7 @@ A modern GTK4/Libadwaita wallpaper picker application. Browse and discover wallp
 ## Features
 
 - **Wallhaven Integration**: Search, filter, and browse thousands of wallpapers from Wallhaven.cc with support for categories, purity levels, and sorting options
-- **Local Wallpaper Management**: Browse and manage wallpapers from your `~/Pictures` directory with thumbnail previews
+ - **Local Wallpaper Management**: Browse and manage wallpapers from your `~/Pictures` directory (or custom directory) with thumbnail previews
 - **Favorites System**: Save your favorite wallpapers for quick access across sessions
 - **Smart Thumbnail Caching**: Persistent disk-based caching for instant thumbnail loading with automatic cleanup
 - **Smooth Transitions**: Animated wallpaper changes using the `awww` utility
@@ -30,14 +30,16 @@ A modern GTK4/Libadwaita wallpaper picker application. Browse and discover wallp
 
 ### Python Packages
 
-- PyGObject
-- requests
-- send2trash
-- fuzzywuzzy
+ - PyGObject
+ - requests
+ - send2trash
+ - aiohttp
+ - Pillow
+ - rapidfuzz
 
 ## Installation
 
-### From Git Repository
+### From Git Repository (Recommended)
 
 1. Clone the repository:
 ```bash
@@ -45,15 +47,29 @@ git clone https://github.com/gotar/wallpicker.git
 cd wallpicker
 ```
 
-2. Install Python dependencies:
+2. Run the installation script:
 ```bash
-pip install -r requirements.txt
+./install.sh
 ```
 
-3. Run the application:
+The installation script will:
+- Install system dependencies (GTK4, Libadwaita, Python bindings)
+- Install Python dependencies from requirements.txt
+- Copy application files to `~/.local/share/wallpicker`
+- Create a symlink in `~/.local/bin/wallpicker`
+- Install desktop entry and icon
+
+3. Make sure `~/.local/bin` is in your PATH (add to `~/.bashrc` or `~/.zshrc`):
 ```bash
-./wallpicker
+export PATH="$HOME/.local/bin:$PATH"
 ```
+
+4. Run the application:
+```bash
+wallpicker
+```
+
+**Note**: You may need to log out and log back in for the desktop entry to appear in your application menu.
 
 ### Arch Linux / Arch-based Distributions
 
@@ -96,7 +112,7 @@ yay -S awww
 
 Launch the application:
 ```bash
-./wallpicker
+wallpicker
 ```
 
 ### Application Overview
@@ -114,9 +130,10 @@ Browse wallpapers from Wallhaven.cc directly within the application.
 
 #### Local Tab
 
-Manage your existing wallpaper collection from `~/Pictures`.
+Manage your existing wallpaper collection from your local directory.
 
 - **Browse**: View thumbnails of your local wallpapers
+- **Custom Directory**: Click the folder icon to select a custom wallpapers directory (defaults to `~/Pictures`)
 - **Set Wallpaper**: Apply any image as your desktop background
 - **Delete**: Remove unwanted wallpapers (moves to trash)
 
@@ -141,13 +158,20 @@ WallPicker uses a configuration file at `~/.config/wallpicker/config.json` for c
 }
 ```
 
-- **local_wallpapers_dir**: Custom path to your wallpapers directory (default: `~/Pictures/Upscaled_Wallpapers` or `~/Pictures`)
+ - **local_wallpapers_dir**: Custom path to your wallpapers directory (default: `~/Pictures`)
 - **wallhaven_api_key**: Wallhaven API key for extended access (optional)
 
-### Setting Custom Wallpaper Directory
+ ### Setting Custom Wallpaper Directory
 
-To use a custom directory for local wallpapers:
+You can change the wallpaper directory in two ways:
 
+**Via UI (Recommended)**:
+1. Open WallPicker and navigate to the Local tab
+2. Click the folder icon in the toolbar
+3. Select your desired wallpapers directory
+4. The setting will be saved automatically
+
+**Via Configuration File**:
 1. Create configuration directory:
 ```bash
 mkdir -p ~/.config/wallpicker

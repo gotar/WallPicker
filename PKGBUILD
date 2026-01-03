@@ -1,7 +1,7 @@
 # Maintainer: pgotar <pgotar@users.noreply.github.com>
 pkgname=wallpicker
 pkgver=1.1
-pkgrel=1
+pkgrel=2
 pkgdesc="Modern GTK4/Libadwaita wallpaper picker with Wallhaven integration"
 arch=('any')
 url="https://github.com/gotar/wallpicker"

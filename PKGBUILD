@@ -1,6 +1,6 @@
 # Maintainer: pgotar <pgotar@users.noreply.github.com>
 pkgname=wallpicker
-pkgver=1.0
+pkgver=1.1.1
 pkgrel=1
 pkgdesc="Modern GTK4/Libadwaita wallpaper picker with Wallhaven integration"
 arch=('any')
@@ -39,7 +39,7 @@ package() {
 
   # Create launcher script
   cat > "${pkgdir}/usr/share/${pkgname}/wallpicker" << EOF
-#!/usr/bin/env python3
+#!/usr/bin/python3
 import sys
 import os
 sys.path.insert(0, '/usr/share/wallpicker')

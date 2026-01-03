@@ -168,7 +168,9 @@ class WallPickerWindow(Adw.ApplicationWindow):
         header = Adw.HeaderBar()
         header.set_title_widget(Gtk.Label(label="Wallpicker", css_classes=["title"]))
 
-        self.search_entry = Gtk.SearchEntry(placeholder_text="Search Wallhaven...")
+        self.search_entry = Gtk.SearchEntry(
+            placeholder_text="Search local wallpapers..."
+        )
         self.search_entry.set_hexpand(True)
         self.search_entry.set_max_width_chars(40)
         self.search_entry.connect("search-changed", self._on_search_changed)
@@ -213,10 +215,14 @@ class WallPickerWindow(Adw.ApplicationWindow):
     def _on_tab_changed(self, stack, pspec):
         visible_child = stack.get_visible_child()
         if visible_child == self.wallhaven_box:
+            self.search_entry.set_placeholder_text("Search Wallhaven...")
             self.sorting_combo.set_active(5)
             self.categories_combo.set_active(1)
             self._on_wallhaven_search(None)
+        elif visible_child == self.local_box:
+            self.search_entry.set_placeholder_text("Search local images...")
         elif visible_child == self.favorites_box:
+            self.search_entry.set_placeholder_text("Search favorites...")
             self._load_favorites()
 
     def _create_wallhaven_ui(self, parent):
@@ -574,6 +580,20 @@ class WallPickerWindow(Adw.ApplicationWindow):
             self._on_local_search()
         elif visible_child == self.wallhaven_box:
             self._on_wallhaven_search(None)
+        elif visible_child == self.favorites_box:
+            self._on_favorites_search()
+
+    def _on_favorites_search(self):
+        query = self.search_entry.get_text()
+        app = Gtk.Application.get_default()
+
+        wallpapers = app.favorites_service.search_wallpapers(query)
+        list_store = Gio.ListStore()
+        for wp in wallpapers:
+            list_store.append(wp)
+
+        self.favorites_selection.set_model(list_store)
+        self.favorites_status.set_text(f"Found {len(wallpapers)} wallpapers")
 
     def _on_local_search(self):
         query = self.search_entry.get_text()
@@ -743,7 +763,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
         fav_btn = Gtk.Button(
             icon_name="starred-symbolic",
             tooltip_text="Add to Favorites",
-            css_classes=["action-button"],
+            css_classes=["action-button", "favorite-icon"],
         )
         trash_btn = Gtk.Button(
             icon_name="user-trash-symbolic",

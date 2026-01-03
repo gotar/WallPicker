@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import List, Dict
 
+from rapidfuzz import process, fuzz
 from .wallhaven_service import Wallpaper
 
 
@@ -65,3 +66,35 @@ class FavoritesService:
             except Exception as e:
                 print(f"Error parsing favorite: {e}")
         return wallpapers
+
+    def search_wallpapers(self, query: str) -> List[Wallpaper]:
+        """Search favorites by query using fuzzy matching."""
+        if not query:
+            return self.get_favorites()
+
+        favorites = self.get_favorites()
+        if not favorites:
+            return []
+
+        search_strings = []
+        for wp in favorites:
+            search_strings.append(wp.id)
+            search_strings.append(wp.category)
+
+        results = process.extract(
+            query,
+            search_strings,
+            scorer=fuzz.WRatio,
+            limit=50,
+            score_cutoff=60,
+        )
+
+        seen_ids = set()
+        matched_wallpapers = []
+        for match, score, idx in results:
+            wp = favorites[idx // 2]
+            if wp.id not in seen_ids:
+                seen_ids.add(wp.id)
+                matched_wallpapers.append(wp)
+
+        return matched_wallpapers

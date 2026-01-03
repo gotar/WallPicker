@@ -9,7 +9,6 @@ from pathlib import Path
 import requests
 import threading
 import os
-from fuzzywuzzy import fuzz
 
 from services.wallhaven_service import WallhavenService, Wallpaper
 from services.local_service import LocalWallpaperService, LocalWallpaper
@@ -48,6 +47,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
         super().__init__(application=app, title="Wallpicker")
         self.set_default_size(1200, 800)
         self.current_wallpaper_path = self._get_current_wallpaper()
+        self.search_changed_timer = None
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.set_content(main_box)
@@ -509,6 +509,16 @@ class WallPickerWindow(Adw.ApplicationWindow):
         elif current_page == "favorites":
             self._load_favorites()
 
+    def _on_search_changed(self, entry):
+        if self.search_changed_timer:
+            GLib.source_remove(self.search_changed_timer)
+
+        def trigger_search():
+            self.search_changed_timer = None
+            self._on_wallhaven_search(None)
+
+        self.search_changed_timer = GLib.timeout_add(500, trigger_search)
+
     def _on_wallhaven_search(self, button):
         query = self.search_entry.get_text()
         categories_map = {0: "111", 1: "100", 2: "010", 3: "001"}
@@ -748,17 +758,12 @@ class WallPickerWindow(Adw.ApplicationWindow):
                 GLib.idle_add(set_image, None, str(e))
 
         def set_image(pixbuf, error):
-            try:
-                if pixbuf:
+            if pixbuf:
+                try:
                     texture = Gdk.Texture.new_for_pixbuf(pixbuf)
                     image_widget.set_paintable(texture)
-                else:
-                    image_widget.set_icon_name("image-missing-symbolic")
-                    image_widget.set_pixel_size(64)
-            except Exception as e:
-                print(f"Error setting texture: {e}")
-                image_widget.set_icon_name("image-missing-symbolic")
-                image_widget.set_pixel_size(64)
+                except Exception as e:
+                    print(f"Error setting texture: {e}")
 
         threading.Thread(target=do_load, daemon=True).start()
 

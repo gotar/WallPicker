@@ -17,7 +17,7 @@ A modern GTK4/Libadwaita wallpaper picker application. Browse and discover wallp
 
 ## Screenshots
 
-<!-- Add screenshots here when available -->
+![WallPicker Screenshot](data/screenshot.png)
 
 ## Requirements
 
@@ -33,6 +33,7 @@ A modern GTK4/Libadwaita wallpaper picker application. Browse and discover wallp
 - PyGObject
 - requests
 - send2trash
+- fuzzywuzzy
 
 ## Installation
 
@@ -106,14 +107,51 @@ Quick access to your saved favorite wallpapers.
 
 ## Configuration
 
+WallPicker uses a configuration file at `~/.config/wallpicker/config.json` for customization. The configuration file is automatically created on first launch with default values.
+
+### Configuration Options
+
+```json
+{
+    "local_wallpapers_dir": null,
+    "wallhaven_api_key": null
+}
+```
+
+- **local_wallpapers_dir**: Custom path to your wallpapers directory (default: `~/Pictures/Upscaled_Wallpapers` or `~/Pictures`)
+- **wallhaven_api_key**: Wallhaven API key for extended access (optional)
+
+### Setting Custom Wallpaper Directory
+
+To use a custom directory for local wallpapers:
+
+1. Create configuration directory:
+```bash
+mkdir -p ~/.config/wallpicker
+```
+
+2. Set your custom directory:
+```bash
+echo '{"local_wallpapers_dir": "/path/to/your/wallpapers"}' > ~/.config/wallpicker/config.json
+```
+
+3. Restart WallPicker
+
+**Note**: Use the absolute path (e.g., `/home/username/Papers`) to your wallpaper directory.
+
 ### Wallhaven API Key (Optional)
 
 For full access to Wallhaven features (including NSFW content if your account is verified):
 
 1. Create a Wallhaven account and obtain your API key from [wallhaven.cc/settings/account](https://wallhaven.cc/settings/account)
-2. Create the configuration directory:
+2. Add your API key to the config:
 ```bash
-mkdir -p ~/.config/wallpicker
+echo '{"wallhaven_api_key": "your_api_key_here"}' > ~/.config/wallpicker/config.json
+```
+
+Or combine both settings:
+```bash
+echo '{"local_wallpapers_dir": "/path/to/wallpapers", "wallhaven_api_key": "your_api_key"}' > ~/.config/wallpicker/config.json
 ```
 3. Add your API key:
 ```bash
@@ -144,23 +182,24 @@ awww ~/.cache/current_wallpaper --transition-type outer --transition-duration 1
 
 ```
 wallpicker/
-├── wallpicker                    # Application entry point
-├── launcher.py                   # Development launcher
-├── install.sh                    # Installation script
-├── src/
-│   ├── services/
-│   │   ├── wallhaven_service.py   # Wallhaven API integration
-│   │   ├── local_service.py       # Local wallpaper browsing
-│   │   ├── wallpaper_setter.py   # Wallpaper application logic
-│   │   ├── favorites_service.py   # Favorites management
-│   │   └── thumbnail_cache.py    # Image caching system
-│   └── ui/
-│       └── main_window.py        # GTK4/Libadwaita UI
-├── tests/
-│   └── run_tests.py              # Test suite
-├── requirements.txt              # Python dependencies
-├── README.md                     # This file
-└── .gitignore
+ ├── wallpicker                    # Application entry point
+ ├── launcher.py                   # Development launcher
+ ├── install.sh                    # Installation script
+ ├── src/
+ │   ├── services/
+ │   │   ├── wallhaven_service.py   # Wallhaven API integration
+ │   │   ├── local_service.py       # Local wallpaper browsing
+ │   │   ├── wallpaper_setter.py   # Wallpaper application logic
+ │   │   ├── favorites_service.py   # Favorites management
+ │   │   ├── config_service.py      # Configuration management
+ │   │   └── thumbnail_cache.py    # Image caching system
+ │   └── ui/
+ │       └── main_window.py        # GTK4/Libadwaita UI
+ ├── tests/
+ │   └── run_tests.py              # Test suite
+ ├── requirements.txt              # Python dependencies
+ ├── README.md                     # This file
+ └── .gitignore
 ```
 
 ## Development

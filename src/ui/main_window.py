@@ -14,6 +14,7 @@ from services.wallhaven_service import WallhavenService, Wallpaper
 from services.local_service import LocalWallpaperService, LocalWallpaper
 from services.wallpaper_setter import WallpaperSetter
 from services.favorites_service import FavoritesService
+from services.thumbnail_cache import ThumbnailCache
 
 
 class MainWindow(Adw.Application):
@@ -24,6 +25,7 @@ class MainWindow(Adw.Application):
         self.local_service = LocalWallpaperService()
         self.wallpaper_setter = WallpaperSetter()
         self.favorites_service = FavoritesService()
+        self.thumbnail_cache = ThumbnailCache()
 
     def do_activate(self):
         if not self.window:
@@ -104,12 +106,41 @@ class WallPickerWindow(Adw.ApplicationWindow):
             font-size: 10px;
             font-weight: bold;
         }
+        .action-button:hover {
+            background: shade(@card_bg_color, 1.1);
+            transform: scale(1.02);
+        }
+        .action-button:active {
+            background: shade(@card_bg_color, 0.9);
+            transform: scale(0.98);
+        }
+        .suggested-action:hover {
+            background: shade(@accent_bg_color, 1.1);
+            transform: scale(1.02);
+        }
+        .suggested-action:active {
+            background: shade(@accent_bg_color, 0.9);
+            transform: scale(0.98);
+        }
+        .destructive-action:hover {
+            background: shade(@error_bg_color, 1.1);
+            transform: scale(1.02);
+        }
+        .destructive-action:active {
+            background: shade(@error_bg_color, 0.9);
+            transform: scale(0.98);
+        }
         """
         provider = Gtk.CssProvider()
         provider.load_from_data(css)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
+
+    def _send_notification(self, title, body):
+        notification = Gio.Notification.new(title)
+        notification.set_body(body)
+        self.get_application().send_notification(None, notification)
 
     def _create_header_bar(self, parent):
         header = Adw.HeaderBar()
@@ -153,6 +184,17 @@ class WallPickerWindow(Adw.ApplicationWindow):
 
         parent.append(switcher)
         parent.append(self.stack)
+
+        self.stack.connect("notify::visible-child", self._on_tab_changed)
+
+    def _on_tab_changed(self, stack, pspec):
+        visible_child = stack.get_visible_child()
+        if visible_child == self.wallhaven_box:
+            self.sorting_combo.set_active(5)
+            self.categories_combo.set_active(1)
+            self._on_wallhaven_search(None)
+        elif visible_child == self.favorites_box:
+            self._load_favorites()
 
     def _create_wallhaven_ui(self, parent):
         filter_box = Gtk.Box(
@@ -330,10 +372,8 @@ class WallPickerWindow(Adw.ApplicationWindow):
         is_fav = app.favorites_service.is_favorite(wallpaper.id)
         if is_fav:
             list_item.fav_btn.set_icon_name("starred-symbolic")
-            list_item.fav_btn.add_css_class("suggested-action")
         else:
             list_item.fav_btn.set_icon_name("non-starred-symbolic")
-            list_item.fav_btn.remove_css_class("suggested-action")
 
         list_item.set_btn.connect(
             "clicked", self._on_set_wallhaven_wallpaper, wallpaper
@@ -377,11 +417,6 @@ class WallPickerWindow(Adw.ApplicationWindow):
             tooltip_text="Set as Wallpaper",
             css_classes=["action-button", "suggested-action"],
         )
-        download_btn = Gtk.Button(
-            icon_name="folder-download-symbolic",
-            tooltip_text="Save to Library",
-            css_classes=["action-button"],
-        )
         remove_btn = Gtk.Button(
             icon_name="user-trash-symbolic",
             tooltip_text="Remove from Favorites",
@@ -389,7 +424,6 @@ class WallPickerWindow(Adw.ApplicationWindow):
         )
 
         btn_box.append(set_btn)
-        btn_box.append(download_btn)
         btn_box.append(remove_btn)
         card.append(btn_box)
 
@@ -397,7 +431,6 @@ class WallPickerWindow(Adw.ApplicationWindow):
         list_item.image = image
         list_item.info = info
         list_item.set_btn = set_btn
-        list_item.download_btn = download_btn
         list_item.remove_btn = remove_btn
 
     def _on_favorite_item_bind(self, factory, list_item):
@@ -414,9 +447,6 @@ class WallPickerWindow(Adw.ApplicationWindow):
         list_item.set_btn.connect(
             "clicked", self._on_set_wallhaven_wallpaper, wallpaper
         )
-        list_item.download_btn.connect(
-            "clicked", self._on_download_wallpaper, wallpaper
-        )
         list_item.remove_btn.connect("clicked", self._on_remove_favorite, wallpaper)
 
     def _on_toggle_favorite(self, button, wallpaper, btn_widget):
@@ -424,11 +454,16 @@ class WallPickerWindow(Adw.ApplicationWindow):
         if app.favorites_service.is_favorite(wallpaper.id):
             app.favorites_service.remove_favorite(wallpaper.id)
             btn_widget.set_icon_name("non-starred-symbolic")
-            btn_widget.remove_css_class("suggested-action")
+            self._send_notification(
+                "Removed from Favorites",
+                f"Wallpaper {wallpaper.id} removed from favorites.",
+            )
         else:
             app.favorites_service.add_favorite(wallpaper)
             btn_widget.set_icon_name("starred-symbolic")
-            btn_widget.add_css_class("suggested-action")
+            self._send_notification(
+                "Added to Favorites", f"Wallpaper {wallpaper.id} added to favorites."
+            )
 
     def _on_remove_favorite(self, button, wallpaper):
         app = Gtk.Application.get_default()
@@ -488,22 +523,8 @@ class WallPickerWindow(Adw.ApplicationWindow):
         threading.Thread(target=do_search, daemon=True).start()
 
     def _load_thumbnail(self, image_widget, url):
-        def do_load():
-            try:
-                response = requests.get(url, timeout=10)
-                if response.status_code == 200:
-                    GLib.idle_add(set_image, response.content)
-            except Exception:
-                pass
-
-        def set_image(data):
-            try:
-                texture = Gdk.Texture.new_from_bytes(GLib.Bytes.new(data))
-                image_widget.set_paintable(texture)
-            except Exception:
-                pass
-
-        threading.Thread(target=do_load, daemon=True).start()
+        app = Gtk.Application.get_default()
+        app.thumbnail_cache.load_thumbnail_with_cache(url, image_widget)
 
     def _on_set_wallhaven_wallpaper(self, button, wallpaper):
         app = Gtk.Application.get_default()
@@ -522,8 +543,16 @@ class WallPickerWindow(Adw.ApplicationWindow):
             if success and app.wallpaper_setter.set_wallpaper(dest_path):
                 self.current_wallpaper_path = str(dest_path)
                 self.wallhaven_status.set_text(f"Wallpaper set!")
+                self._send_notification(
+                    "Wallpaper Set",
+                    f"Wallpaper {wallpaper.id} has been set successfully.",
+                )
             else:
                 self.wallhaven_status.set_text("Failed to set wallpaper")
+                self._send_notification(
+                    "Failed to Set Wallpaper",
+                    "There was an error setting the wallpaper.",
+                )
 
         threading.Thread(target=do_download, daemon=True).start()
 
@@ -544,8 +573,15 @@ class WallPickerWindow(Adw.ApplicationWindow):
             if success:
                 self.wallhaven_status.set_text(f"Saved to {dest_path.name}")
                 self._load_local_wallpapers()
+                self._send_notification(
+                    "Wallpaper Downloaded",
+                    f"Wallpaper {wallpaper.id} saved to library.",
+                )
             else:
                 self.wallhaven_status.set_text("Download failed")
+                self._send_notification(
+                    "Download Failed", "Failed to download the wallpaper."
+                )
 
         threading.Thread(target=do_download, daemon=True).start()
 
@@ -693,9 +729,16 @@ class WallPickerWindow(Adw.ApplicationWindow):
         if app.wallpaper_setter.set_wallpaper(wallpaper.path):
             self.current_wallpaper_path = str(wallpaper.path)
             self.local_status.set_text(f"Set: {wallpaper.filename}")
-            self._load_local_wallpapers()
+            self._send_notification(
+                "Wallpaper Set",
+                f"Local wallpaper {wallpaper.filename} has been set successfully.",
+            )
         else:
             self.local_status.set_text("Failed to set wallpaper")
+            self._send_notification(
+                "Failed to Set Wallpaper",
+                "There was an error setting the local wallpaper.",
+            )
 
     def _on_add_local_to_favorites_btn(self, button, wallpaper):
         app = Gtk.Application.get_default()
@@ -713,11 +756,23 @@ class WallPickerWindow(Adw.ApplicationWindow):
         )
         app.favorites_service.add_favorite(local_wp)
         self.local_status.set_text(f"Added {wallpaper.filename} to favorites")
+        self._send_notification(
+            "Added to Favorites",
+            f"Local wallpaper {wallpaper.filename} added to favorites.",
+        )
 
     def _on_delete_local_wallpaper(self, button, wallpaper):
         app = Gtk.Application.get_default()
         if app.local_service.delete_wallpaper(wallpaper.path):
             self._load_local_wallpapers()
             self.local_status.set_text("Moved to trash")
+            self._send_notification(
+                "Wallpaper Deleted",
+                f"Local wallpaper {wallpaper.filename} moved to trash.",
+            )
         else:
             self.local_status.set_text("Failed to delete")
+            self._send_notification(
+                "Failed to Delete Wallpaper",
+                "There was an error deleting the local wallpaper.",
+            )

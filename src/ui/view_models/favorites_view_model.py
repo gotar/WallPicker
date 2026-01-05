@@ -39,6 +39,7 @@ class FavoritesViewModel(BaseViewModel):
     @favorites.setter
     def favorites(self, value: list[Wallpaper]) -> None:
         self._favorites = value
+        self.notify("favorites")
 
     def load_favorites(self) -> None:
         """Load all favorites"""
@@ -126,18 +127,17 @@ class FavoritesViewModel(BaseViewModel):
         finally:
             self.is_busy = False
 
-    def remove_favorite(self, favorite: Favorite) -> bool:
+    def remove_favorite(self, wallpaper_id: str) -> bool:
         """Remove wallpaper from favorites"""
         try:
             self.is_busy = True
             self.error_message = None
 
-            result = self.favorites_service.remove_favorite(favorite.wallpaper_id)
+            result = self.favorites_service.remove_favorite(wallpaper_id)
 
             if result:
-                # Remove from list if deletion succeeded
-                if favorite in self.favorites:
-                    self.favorites.remove(favorite)
+                # Reload favorites from disk to ensure UI updates (same as tab switch)
+                self.load_favorites()
 
             return result
 
@@ -147,17 +147,12 @@ class FavoritesViewModel(BaseViewModel):
         finally:
             self.is_busy = False
 
-    async def set_wallpaper(self, favorite: Favorite) -> bool:
-        """Set wallpaper as desktop background"""
+    def set_wallpaper(self, favorite: Favorite) -> bool:
         try:
             self.is_busy = True
             self.error_message = None
 
             result = self.wallpaper_setter.set_wallpaper(favorite.wallpaper.path)
-
-            if not result:
-                self.error_message = "Failed to set wallpaper"
-
             return result
 
         except Exception as e:

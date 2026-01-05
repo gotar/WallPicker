@@ -137,25 +137,27 @@ class FavoritesService(BaseService):
         self._save_favorites(favorites)
         self.log_info(f"Added wallpaper {wallpaper.id} to favorites")
 
-    def remove_favorite(self, wallpaper_id: str) -> None:
+    def remove_favorite(self, wallpaper_id: str) -> bool:
         """Remove wallpaper from favorites by ID.
 
         Args:
             wallpaper_id: ID of wallpaper to remove
 
-        Raises:
-            ServiceError: If wallpaper not found in favorites
+        Returns:
+            True if wallpaper was removed, False if not found
         """
         favorites = self._load_favorites()
 
+        original_count = len(favorites)
         favorites = [f for f in favorites if f.wallpaper_id != wallpaper_id]
 
-        if len(favorites) == len(self._favorites):
+        if len(favorites) == original_count:
             self.log_warning(f"Wallpaper {wallpaper_id} not found in favorites")
-            return
+            return False
 
         self._save_favorites(favorites)
         self.log_info(f"Removed wallpaper {wallpaper_id} from favorites")
+        return True
 
     def is_favorite(self, wallpaper_id: str) -> bool:
         """Check if wallpaper is in favorites.
@@ -169,14 +171,14 @@ class FavoritesService(BaseService):
         favorites = self._load_favorites()
         return any(f.wallpaper_id == wallpaper_id for f in favorites)
 
-    def get_favorites(self) -> list[Wallpaper]:
+    def get_favorites(self) -> list[Favorite]:
         """Get all favorite wallpapers.
 
         Returns:
-            List of Wallpaper domain models
+            List of Favorite domain models
         """
         favorites = self._load_favorites()
-        return [f.wallpaper for f in favorites]
+        return favorites
 
     def search_favorites(self, query: str) -> list[Wallpaper]:
         """Search favorites by query using fuzzy matching.

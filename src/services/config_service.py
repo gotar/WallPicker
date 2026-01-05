@@ -127,3 +127,9 @@ class ConfigService(BaseService):
         """
         config_model = Config.from_dict(config)
         self.save_config(config_model)
+
+    def set_pictures_dir(self, path: Path) -> None:
+        config = self.get_config()
+        if config:
+            config.local_wallpapers_dir = path
+            self.save_config(config)

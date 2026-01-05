@@ -30,12 +30,15 @@ class LocalViewModel(BaseViewModel):
         wallpaper_setter: WallpaperSetter,
         pictures_dir: Path | None = None,
         favorites_service: FavoritesService | None = None,
+        config_service=None,
     ) -> None:
         super().__init__()
         self.local_service = local_service
         self.wallpaper_setter = wallpaper_setter
         self.pictures_dir = pictures_dir
         self.favorites_service = favorites_service
+        self.config_service = config_service
+        self.notification_service = None
 
         self._wallpapers: list[LocalWallpaper] = []
         self.search_query = ""
@@ -104,7 +107,6 @@ class LocalViewModel(BaseViewModel):
             self.is_busy = False
 
     def delete_wallpaper(self, wallpaper: LocalWallpaper) -> bool:
-        """Delete wallpaper from disk"""
         try:
             self.is_busy = True
             self.error_message = None
@@ -112,14 +114,18 @@ class LocalViewModel(BaseViewModel):
             result = self.local_service.delete_wallpaper(wallpaper.path)
 
             if result:
-                # Remove from list if deletion succeeded
-                if wallpaper in self.wallpapers:
-                    self.wallpapers.remove(wallpaper)
+                if wallpaper in self._wallpapers:
+                    self._wallpapers.remove(wallpaper)
+                    self.notify("wallpapers")
+                if self.notification_service:
+                    self.notification_service.notify_success(f"Deleted '{wallpaper.filename}'")
 
             return result
 
         except Exception as e:
             self.error_message = f"Failed to delete wallpaper: {e}"
+            if self.notification_service:
+                self.notification_service.notify_error(f"Failed to delete: {e}")
             return False
         finally:
             self.is_busy = False
@@ -129,7 +135,14 @@ class LocalViewModel(BaseViewModel):
         self.search_query = ""
         self.load_wallpapers()
 
-    async def add_to_favorites(self, wallpaper: LocalWallpaper) -> bool:
+    def set_pictures_dir(self, path: Path) -> None:
+        self.pictures_dir = path
+        self.local_service.pictures_dir = path
+        if self.config_service:
+            self.config_service.set_pictures_dir(path)
+        self.load_wallpapers()
+
+    def add_to_favorites(self, wallpaper: LocalWallpaper) -> bool:
         if not self.favorites_service:
             self.error_message = "Favorites service not available"
             return False
@@ -138,11 +151,9 @@ class LocalViewModel(BaseViewModel):
             self.is_busy = True
             self.error_message = None
 
-            # Convert LocalWallpaper to Wallpaper domain model
             from domain.wallpaper import Wallpaper, WallpaperSource, Resolution
             from PIL import Image
 
-            # Get actual image dimensions
             width, height = 1920, 1080
             try:
                 with Image.open(wallpaper.path) as img:
@@ -162,10 +173,17 @@ class LocalViewModel(BaseViewModel):
 
             self.favorites_service.add_favorite(wallpaper_domain)
 
+            if self.notification_service:
+                self.notification_service.notify_success(
+                    f"Added '{wallpaper.filename}' to favorites"
+                )
+
             return True
 
         except Exception as e:
             self.error_message = f"Failed to add to favorites: {e}"
+            if self.notification_service:
+                self.notification_service.notify_error(f"Failed to add to favorites: {e}")
             return False
         finally:
             self.is_busy = False

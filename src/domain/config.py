@@ -12,6 +12,7 @@ class Config:
 
     local_wallpapers_dir: Path | None = None
     wallhaven_api_key: str | None = None
+    notifications_enabled: bool = True
 
     def validate(self) -> None:
         """Validate configuration state."""
@@ -19,13 +20,9 @@ class Config:
             if not isinstance(self.local_wallpapers_dir, Path):
                 raise ConfigError("local_wallpapers_dir must be a Path object")
             if not self.local_wallpapers_dir.exists():
-                raise ConfigError(
-                    f"Directory does not exist: {self.local_wallpapers_dir}"
-                )
+                raise ConfigError(f"Directory does not exist: {self.local_wallpapers_dir}")
             if not self.local_wallpapers_dir.is_dir():
-                raise ConfigError(
-                    f"Path is not a directory: {self.local_wallpapers_dir}"
-                )
+                raise ConfigError(f"Path is not a directory: {self.local_wallpapers_dir}")
 
     @property
     def pictures_dir(self) -> Path:
@@ -39,6 +36,7 @@ class Config:
                 str(self.local_wallpapers_dir) if self.local_wallpapers_dir else None
             ),
             "wallhaven_api_key": self.wallhaven_api_key,
+            "notifications_enabled": self.notifications_enabled,
         }
 
     @classmethod
@@ -46,16 +44,18 @@ class Config:
         """Create from dict for JSON deserialization."""
         local_dir_value = data.get("local_wallpapers_dir")
         api_key_value = data.get("wallhaven_api_key")
+        notifications_value = data.get("notifications_enabled", True)
 
-        # Handle None values properly (JSON null → Python None)
         local_dir = (
             Path(local_dir_value)
             if local_dir_value and isinstance(local_dir_value, (str, Path))
             else None
         )
         api_key = api_key_value if isinstance(api_key_value, str) else None
+        notifications = notifications_value if isinstance(notifications_value, bool) else True
 
         return cls(
             local_wallpapers_dir=local_dir,
             wallhaven_api_key=api_key,
+            notifications_enabled=notifications,
         )

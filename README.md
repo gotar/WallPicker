@@ -133,9 +133,11 @@ Browse wallpapers from Wallhaven.cc directly within the application.
 Manage your existing wallpaper collection from your local directory.
 
 - **Browse**: View thumbnails of your local wallpapers
-- **Custom Directory**: Click the folder icon to select a custom wallpapers directory (defaults to `~/Pictures`)
+- **Custom Directory**: Click the folder icon in the toolbar to select a custom wallpapers directory (defaults to `~/Pictures`)
 - **Set Wallpaper**: Apply any image as your desktop background
+- **Add to Favorites**: Save wallpapers to your favorites collection
 - **Delete**: Remove unwanted wallpapers (moves to trash)
+- **Notifications**: Get system notifications for successful actions
 
 #### Favorites Tab
 
@@ -144,6 +146,7 @@ Quick access to your saved favorite wallpapers.
 - **Add to Favorites**: Save any wallpaper from Wallhaven or Local tabs
 - **Quick Access**: Instantly browse and set your favorites
 - **Persistent Storage**: Favorites persist across application restarts
+- **Auto-refresh**: Automatically reloads when switching to the tab
 
 ## Configuration
 
@@ -154,12 +157,14 @@ WallPicker uses a configuration file at `~/.config/wallpicker/config.json` for c
 ```json
 {
     "local_wallpapers_dir": null,
-    "wallhaven_api_key": null
+    "wallhaven_api_key": null,
+    "notifications_enabled": true
 }
 ```
 
  - **local_wallpapers_dir**: Custom path to your wallpapers directory (default: `~/Pictures`)
 - **wallhaven_api_key**: Wallhaven API key for extended access (optional)
+- **notifications_enabled**: Enable/disable system notifications for actions (default: true)
 
  ### Setting Custom Wallpaper Directory
 

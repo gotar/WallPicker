@@ -49,9 +49,7 @@ class FavoritesService(BaseService):
             if self.favorites_file.exists():
                 with open(self.favorites_file) as f:
                     favorites_data = json.load(f)
-                self._favorites = [
-                    Favorite.from_dict(data, Wallpaper) for data in favorites_data
-                ]
+                self._favorites = self._parse_favorites_data(favorites_data)
                 self.log_debug(f"Loaded {len(self._favorites)} favorites")
             else:
                 self._favorites = []
@@ -63,6 +61,64 @@ class FavoritesService(BaseService):
             raise ServiceError(f"Failed to load favorites: {e}") from e
 
         return self._favorites
+
+    def _parse_favorites_data(self, data) -> list[Favorite]:
+        from domain.wallpaper import Wallpaper, WallpaperSource, WallpaperPurity, Resolution
+
+        if isinstance(data, list):
+            return [Favorite.from_dict(item, Wallpaper) for item in data]
+
+        if isinstance(data, dict):
+            favorites = []
+            for wallpaper_id, wallpaper_data in data.items():
+                try:
+                    resolution_str = wallpaper_data.get("resolution", "1920x1080")
+                    if isinstance(resolution_str, str) and "x" in resolution_str:
+                        w, h = resolution_str.split("x")
+                        resolution = Resolution(width=int(w), height=int(h))
+                    else:
+                        resolution = Resolution(width=1920, height=1080)
+
+                    source_str = wallpaper_data.get("source", "wallhaven")
+                    if source_str == "local":
+                        source = WallpaperSource.LOCAL
+                    elif source_str == "favorite":
+                        source = WallpaperSource.FAVORITE
+                    else:
+                        source = WallpaperSource.WALLHAVEN
+
+                    purity_str = wallpaper_data.get("purity", "sfw").lower()
+                    if purity_str == "sketchy":
+                        purity = WallpaperPurity.SKETCHY
+                    elif purity_str == "nsfw":
+                        purity = WallpaperPurity.NSFW
+                    else:
+                        purity = WallpaperPurity.SFW
+
+                    wallpaper = Wallpaper(
+                        id=wallpaper_data.get("id", wallpaper_id),
+                        url=wallpaper_data.get("url", ""),
+                        path=wallpaper_data.get("path", wallpaper_data.get("thumbs_large", "")),
+                        thumbs_large=wallpaper_data.get(
+                            "thumbs_large", wallpaper_data.get("thumbs_small", "")
+                        ),
+                        thumbs_small=wallpaper_data.get("thumbs_small", ""),
+                        resolution=resolution,
+                        source=source,
+                        category=wallpaper_data.get("category", "general"),
+                        purity=purity,
+                    )
+                    favorite = Favorite(wallpaper=wallpaper, added_at=datetime.now())
+                    favorites.append(favorite)
+                except Exception as e:
+                    self.log_warning(f"Failed to parse favorite {wallpaper_id}: {e}")
+                    continue
+            if favorites:
+                self._save_favorites(favorites)
+                self.log_info(f"Migrated {len(favorites)} favorites from old format")
+            return favorites
+
+        return []
 
     def add_favorite(self, wallpaper: Wallpaper) -> None:
         """Add wallpaper to favorites.
@@ -161,7 +217,5 @@ class FavoritesService(BaseService):
             self._favorites = favorites
             self.log_debug(f"Saved {len(favorites)} favorites to {self.favorites_file}")
         except OSError as e:
-            self.log_error(
-                f"Failed to save favorites to {self.favorites_file}: {e}", exc_info=True
-            )
+            self.log_error(f"Failed to save favorites to {self.favorites_file}: {e}", exc_info=True)
             raise ServiceError(f"Failed to save favorites: {e}") from e

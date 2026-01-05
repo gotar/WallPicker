@@ -9,6 +9,7 @@ This document outlines the required features and expected behavior for the Wallp
 - Supports custom local wallpapers directory (`local_wallpapers_dir`)
 - Falls back to `~/Pictures` if configured directory doesn't exist
 - Persists user preferences
+- System notifications toggle (`notifications_enabled`)
 
 ### Caching System
 - ThumbnailCache for Wallhaven images (7-day expiry, 500MB limit)
@@ -26,6 +27,12 @@ This document outlines the required features and expected behavior for the Wallp
 - Supports animated transitions
 - Symlink-based wallpaper management (`~/.cache/current_wallpaper`)
 
+### Notifications
+- System notifications for successful actions (add to favorites, delete wallpaper)
+- Configurable via `notifications_enabled` setting (default: true)
+- Uses `notify-send` for desktop notifications
+- Graceful fallback when notifications are unavailable
+
 ## Local Tab
 
 ### Core Functionality
@@ -36,14 +43,15 @@ This document outlines the required features and expected behavior for the Wallp
 
 ### Actions Per Wallpaper
 - **Set as Wallpaper**: Sets the image as desktop background
-- **Add to Favorites**: Adds wallpaper to favorites collection
-- **Delete**: Moves file to trash with confirmation dialog
+- **Add to Favorites**: Adds wallpaper to favorites collection with notification
+- **Delete**: Moves file to trash with confirmation dialog and notification
 
 ### Features
 - Recursive directory scanning
 - Supports common image formats (jpg, png, webp, bmp, gif)
 - Real-time directory changes (refresh button)
-- Custom directory selection via config
+- Custom directory selection via folder button or config
+- System notifications for successful actions
 
 ## Wallhaven Tab
 
@@ -84,6 +92,8 @@ This document outlines the required features and expected behavior for the Wallp
 - Persistent storage in `~/.config/wallpicker/favorites.json`
 - Search within favorites
 - Automatic refresh after additions/removals
+- Auto-refresh when switching to tab
+- Backwards compatibility with old favorites format
 
 ## Expected Behavior
 
@@ -128,12 +138,16 @@ UI integration tests are missing, which allowed simplified UI to pass tests. Fut
 
 Use this to verify complete implementation:
 
-- [ ] Config loading and custom directory support
-- [ ] Thumbnail caching system
-- [ ] Local tab with full-size previews and actions
-- [ ] Wallhaven search and filtering
-- [ ] Favorites management
-- [ ] Async thumbnail loading
-- [ ] Error handling and confirmations
-- [ ] Responsive UI layout
-- [ ] Wallpaper setting with transitions
+- [x] Config loading and custom directory support
+- [x] Thumbnail caching system
+- [x] Local tab with full-size previews and actions
+- [x] Wallhaven search and filtering
+- [x] Favorites management
+- [x] Async thumbnail loading
+- [x] Error handling and confirmations
+- [x] Responsive UI layout
+- [x] Wallpaper setting with transitions
+- [x] System notifications for actions
+- [x] Folder button for directory selection
+- [x] Auto-refresh favorites tab
+- [x] Backwards compatibility for old favorites format

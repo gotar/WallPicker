@@ -15,5 +15,5 @@ os.chdir(project_dir)
 from ui.main_window import MainWindow
 
 app = MainWindow()
-exit_status = app.run(sys.argv)
+exit_status = app.run(None)
 sys.exit(exit_status)

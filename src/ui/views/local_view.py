@@ -41,6 +41,11 @@ class LocalView(Gtk.Box):
         refresh_btn.connect("clicked", self._on_refresh_clicked)
         toolbar.append(refresh_btn)
 
+        # Folder button
+        folder_btn = Gtk.Button(icon_name="folder-symbolic", tooltip_text="Choose folder")
+        folder_btn.connect("clicked", self._on_folder_clicked)
+        toolbar.append(folder_btn)
+
         # Loading spinner
         self.loading_spinner = Gtk.Spinner(spinning=False)
         toolbar.append(self.loading_spinner)
@@ -94,8 +99,23 @@ class LocalView(Gtk.Box):
         self.view_model.connect("notify::wallpapers", self._on_wallpapers_changed)
 
     def _on_refresh_clicked(self, button):
-        """Handle refresh button click"""
         self.view_model.refresh_wallpapers()
+
+    def _on_folder_clicked(self, button):
+        window = self.get_root()
+        dialog = Gtk.FileDialog()
+        dialog.set_title("Choose wallpapers folder")
+
+        def on_folder_selected(dialog, result):
+            try:
+                folder = dialog.select_folder_finish(result)
+                if folder:
+                    path = Path(folder.get_path())
+                    self.view_model.set_pictures_dir(path)
+            except Exception:
+                pass
+
+        dialog.select_folder(window, None, on_folder_selected)
 
     def _on_wallpapers_changed(self, obj, pspec):
         """Handle wallpapers property change"""
@@ -113,7 +133,6 @@ class LocalView(Gtk.Box):
 
     def _create_wallpaper_card(self, wallpaper):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        card.set_hexpand(True)
         card.set_size_request(220, 200)
         card.add_css_class("wallpaper-card")
 
@@ -165,17 +184,11 @@ class LocalView(Gtk.Box):
             self.error_message = "Failed to set wallpaper"
 
     def _on_card_double_clicked(self, gesture, n_press, x, y, wallpaper):
-        self._on_set_wallpaper(None, wallpaper)
+        if n_press >= 2:  # Only trigger on double-click
+            self._on_set_wallpaper(None, wallpaper)
 
     def _on_add_to_favorites(self, button, wallpaper):
-        def on_idle():
-            import asyncio
-
-            asyncio.run(self.view_model.add_to_favorites(wallpaper))
-
-        from gi.repository import GLib
-
-        GLib.Idle.add(on_idle)
+        self.view_model.add_to_favorites(wallpaper)
 
     def _on_delete_wallpaper(self, button, wallpaper):
         """Handle delete button click"""

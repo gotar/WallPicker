@@ -78,7 +78,10 @@ class FavoritesView(Gtk.Box):
         # Create flow box for favorites grid
         self.favorites_grid = Gtk.FlowBox()
         self.favorites_grid.set_homogeneous(True)
-        self.favorites_grid.set_max_children_per_line(4)
+        self.favorites_grid.set_min_children_per_line(2)
+        self.favorites_grid.set_max_children_per_line(6)
+        self.favorites_grid.set_column_spacing(12)
+        self.favorites_grid.set_row_spacing(12)
         self.favorites_grid.set_selection_mode(Gtk.SelectionMode.NONE)
         self.scroll.set_child(self.favorites_grid)
 
@@ -132,10 +135,17 @@ class FavoritesView(Gtk.Box):
         card.set_size_request(220, 200)
         card.add_css_class("wallpaper-card")
 
+        # Add double-click gesture
+        gesture = Gtk.GestureClick()
+        gesture.set_button(1)  # Left button only
+        gesture.connect("pressed", self._on_card_double_clicked, wallpaper)
+        card.add_controller(gesture)
+
         image = Gtk.Picture()
         image.set_size_request(200, 160)
         image.set_content_fit(Gtk.ContentFit.CONTAIN)
         image.add_css_class("wallpaper-thumb")
+        image.set_tooltip_text(Path(wallpaper.path).name)  # Filename tooltip
 
         def on_thumbnail_loaded(texture):
             if texture:
@@ -151,7 +161,7 @@ class FavoritesView(Gtk.Box):
         actions_box.set_halign(Gtk.Align.CENTER)
         actions_box.set_homogeneous(True)
 
-        set_btn = Gtk.Button(icon_name="wallpaper-symbolic", tooltip_text="Set as wallpaper")
+        set_btn = Gtk.Button(icon_name="image-x-generic-symbolic", tooltip_text="Set as wallpaper")
         set_btn.add_css_class("action-button")
         set_btn.connect("clicked", self._on_set_wallpaper, wallpaper)
         actions_box.append(set_btn)
@@ -171,6 +181,10 @@ class FavoritesView(Gtk.Box):
         threading.Thread(
             target=lambda: self.view_model.set_wallpaper(wallpaper), daemon=True
         ).start()
+
+    def _on_card_double_clicked(self, gesture, n_press, x, y, wallpaper):
+        if n_press >= 2:  # Only trigger on double-click
+            self._on_set_wallpaper(None, wallpaper)
 
     def _on_remove_favorite(self, button, wallpaper):
         """Handle remove button click"""

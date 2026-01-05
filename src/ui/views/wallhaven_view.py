@@ -263,10 +263,11 @@ class WallhavenView(Gtk.Box):
             import asyncio
 
             asyncio.run(self.view_model.add_to_favorites(wallpaper))
+            return False
 
         from gi.repository import GLib
 
-        GLib.Idle.add(on_idle)
+        GLib.idle_add(on_idle)
 
     def _get_category(self) -> str:
         """Get selected category code"""

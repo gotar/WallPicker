@@ -14,6 +14,7 @@ from gi.repository import Adw, Gtk
 from services.config_service import ConfigService
 from services.favorites_service import FavoritesService
 from services.local_service import LocalWallpaperService
+from services.notification_service import NotificationService
 from services.thumbnail_cache import ThumbnailCache
 from services.wallhaven_service import WallhavenService
 from services.wallpaper_setter import WallpaperSetter
@@ -44,24 +45,34 @@ class MainWindow(Adw.Application):
             config = self.config_service.get_config()
 
             self.wallpaper_setter = WallpaperSetter()
-            local_service = LocalWallpaperService(pictures_dir=pictures_dir)
+            notification_service = NotificationService(
+                enabled=config.notifications_enabled if config else True
+            )
+
+            local_service = LocalWallpaperService(pictures_dir=config.pictures_dir)
             favorites_service = FavoritesService()
             wallhaven_service = WallhavenService()
+            thumbnail_cache = ThumbnailCache()
+
             self.wallhaven_view_model = WallhavenViewModel(
                 wallhaven_service=wallhaven_service,
                 thumbnail_cache=thumbnail_cache,
             )
             self.wallhaven_view_model.favorites_service = favorites_service
+            self.wallhaven_view_model.notification_service = notification_service
             self.local_view_model = LocalViewModel(
                 local_service=local_service,
                 wallpaper_setter=self.wallpaper_setter,
-                pictures_dir=pictures_dir,
+                pictures_dir=config.pictures_dir,
+                config_service=self.config_service,
             )
             self.local_view_model.favorites_service = favorites_service
+            self.local_view_model.notification_service = notification_service
             self.favorites_view_model = FavoritesViewModel(
                 favorites_service=favorites_service,
                 wallpaper_setter=self.wallpaper_setter,
             )
+            self.favorites_view_model.notification_service = notification_service
 
         self.window = WallPickerWindow(
             application=self,
@@ -72,7 +83,9 @@ class MainWindow(Adw.Application):
         self.window.present()
 
 
+class WallPickerWindow(Adw.ApplicationWindow):
     """Main application window with MVVM architecture."""
+
     def __init__(
         self,
         application,
@@ -139,9 +152,16 @@ class MainWindow(Adw.Application):
         main_box.append(self.switcher)
         main_box.append(self.stack)
 
+        self.stack.connect("notify::visible-child", self._on_tab_changed)
+
         # Load initial data
         try:
             self.local_view_model.load_wallpapers()
             self.favorites_view_model.load_favorites()
         except Exception as e:
-            print(f"Error loading initial data: {e}")
+            pass
+
+    def _on_tab_changed(self, stack, pspec):
+        visible_child = stack.get_visible_child()
+        if visible_child == self.favorites_view:
+            self.favorites_view_model.load_favorites()

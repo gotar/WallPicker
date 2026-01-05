@@ -14,9 +14,7 @@ import sys
 
 from gi.repository import GObject
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from domain.wallpaper import Wallpaper
+from domain.wallpaper import Wallpaper, WallpaperSource, WallpaperPurity, Resolution
 from services.favorites_service import FavoritesService
 from services.local_service import LocalWallpaper, LocalWallpaperService
 from services.wallpaper_setter import WallpaperSetter
@@ -31,12 +29,13 @@ class LocalViewModel(BaseViewModel):
         local_service: LocalWallpaperService,
         wallpaper_setter: WallpaperSetter,
         pictures_dir: Path | None = None,
+        favorites_service: FavoritesService | None = None,
     ) -> None:
         super().__init__()
         self.local_service = local_service
         self.wallpaper_setter = wallpaper_setter
         self.pictures_dir = pictures_dir
-        self.favorites_service: FavoritesService | None = None
+        self.favorites_service = favorites_service
 
         self._wallpapers: list[LocalWallpaper] = []
         self.search_query = ""
@@ -139,7 +138,29 @@ class LocalViewModel(BaseViewModel):
             self.is_busy = True
             self.error_message = None
 
-            self.favorites_service.add_favorite(wallpaper)
+            # Convert LocalWallpaper to Wallpaper domain model
+            from domain.wallpaper import Wallpaper, WallpaperSource, Resolution
+            from PIL import Image
+
+            # Get actual image dimensions
+            width, height = 1920, 1080
+            try:
+                with Image.open(wallpaper.path) as img:
+                    width, height = img.size
+            except Exception:
+                pass
+
+            wallpaper_domain = Wallpaper(
+                id=f"local_{hash(wallpaper.path)}",
+                url=str(wallpaper.path),
+                path=str(wallpaper.path),
+                resolution=Resolution(width=width, height=height),
+                source=WallpaperSource.LOCAL,
+                category="general",
+                purity=WallpaperPurity.SFW,
+            )
+
+            self.favorites_service.add_favorite(wallpaper_domain)
 
             return True
 

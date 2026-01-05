@@ -130,12 +130,12 @@ class LocalView(Gtk.Box):
         """Create wallpaper card with image and actions"""
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         card.set_hexpand(True)
-        card.set_size_request(220, 180)
+        card.set_size_request(220, 200)
+        card.add_css_class("wallpaper-card")
 
-        # Use Picture for better scaling with aspect ratio
         image = Gtk.Picture()
-        image.set_size_request(220, 160)
-        image.set_content_fit(Gtk.ContentFit.CONTAIN)  # Keep aspect ratio
+        image.set_size_request(200, 160)
+        image.set_content_fit(Gtk.ContentFit.CONTAIN)
         image.add_css_class("wallpaper-thumb")
 
         def on_thumbnail_loaded(texture):
@@ -148,7 +148,9 @@ class LocalView(Gtk.Box):
         overlay.set_child(image)
         card.append(overlay)
 
-        actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        actions_box.set_halign(Gtk.Align.CENTER)
+        actions_box.set_homogeneous(True)
 
         set_btn = Gtk.Button(icon_name="image-x-generic-symbolic", tooltip_text="Set as wallpaper")
         set_btn.add_css_class("action-button")

@@ -177,20 +177,19 @@ class LocalView(Gtk.Box):
     def _on_set_wallpaper(self, button, wallpaper):
         result = self.view_model.wallpaper_setter.set_wallpaper(str(wallpaper.path))
         if not result:
-            print(f"Failed to set wallpaper: {wallpaper.path}")
+            self.error_message = "Failed to set wallpaper"
 
     def _on_card_double_clicked(self, gesture, n_press, x, y, wallpaper):
         self._on_set_wallpaper(None, wallpaper)
 
-    async def _on_add_to_favorites(self, button, wallpaper):
-        import threading
+    def _on_add_to_favorites(self, button, wallpaper):
+        async def add_fav():
+            await self.view_model.add_to_favorites(wallpaper)
 
-        def add_fav():
-            import asyncio
+        from gi.repository import GLib
 
-            asyncio.run(self.view_model.add_to_favorites(wallpaper))
-
-        threading.Thread(target=add_fav, daemon=True).start()
+        task = GLib.Task.new(None, add_fav)
+        task.run_in_thread()
 
     def _on_delete_wallpaper(self, button, wallpaper):
         """Handle delete button click"""

@@ -183,12 +183,18 @@ class LocalView(Gtk.Box):
         self._on_set_wallpaper(None, wallpaper)
 
     def _on_add_to_favorites(self, button, wallpaper):
-        async def add_fav():
-            await self.view_model.add_to_favorites(wallpaper)
+        def on_task_done(task, result):
+            pass
+
+        def run_async():
+            import asyncio
+
+            async_task = self.view_model.add_to_favorites(wallpaper)
+            return asyncio.run(async_task)
 
         from gi.repository import GLib
 
-        task = GLib.Task.new(None, add_fav)
+        task = GLib.Task.new(None, run_async, on_task_done)
         task.run_in_thread()
 
     def _on_delete_wallpaper(self, button, wallpaper):

@@ -33,7 +33,7 @@ class MainWindow(Adw.Application):
     """Main application entry point."""
 
     def __init__(self, debug=False):
-        super().__init__(application_id="com.example.Wallpicker")
+        super().__init__(application_id="com.gotar.Wallpicker")
         self.debug = debug
         self.window = None
         self.config_service = None
@@ -87,19 +87,7 @@ class MainWindow(Adw.Application):
             wallpaper_setter=self.wallpaper_setter,
         )
 
-        self.local_view_model.connect("wallpaper-set", self._on_wallpaper_set)
-        self.favorites_view_model.connect("wallpaper-set", self._on_wallpaper_set)
-        self.wallhaven_view_model.connect("wallpaper-set", self._on_wallpaper_set)
-
         self.window.present()
-
-    def _on_wallpaper_set(self, view_model, wallpaper_name: str):
-        """Called when wallpaper is set."""
-        if self.window:
-            self.window.set_current_wallpaper(wallpaper_name)
-            current_path = self.wallpaper_setter.get_current_wallpaper()
-            if current_path:
-                self.window._update_current_thumbnail(current_path)
 
 
 class WallPickerWindow(Adw.ApplicationWindow):
@@ -114,6 +102,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
         wallpaper_setter,
     ):
         super().__init__(application=application)
+        self.set_title("WallPicker")
         self.set_default_size(1200, 800)
         self.set_size_request(600, 400)  # Minimum window size
 
@@ -134,27 +123,9 @@ class WallPickerWindow(Adw.ApplicationWindow):
 
         self.toolbar_view = Adw.ToolbarView()
 
+        # Header
         self.header = Adw.HeaderBar()
         self.toolbar_view.add_top_bar(self.header)
-
-        # Current wallpaper thumbnail container (top-left of header)
-        thumbnail_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        thumbnail_container.add_css_class("current-wallpaper-thumbnail")
-
-        # Thumbnail image
-        self.current_thumbnail = Gtk.Picture()
-        self.current_thumbnail.set_size_request(32, 32)
-        self.current_thumbnail.set_content_fit(Gtk.ContentFit.COVER)
-        self.current_thumbnail.add_css_class("current-thumb")
-        self.current_thumbnail.set_tooltip_text("Click to preview current wallpaper")
-
-        # Click gesture (opens preview dialog)
-        click = Gtk.GestureClick()
-        click.connect("pressed", self._on_thumbnail_clicked)
-        self.current_thumbnail.add_controller(click)
-
-        thumbnail_container.append(self.current_thumbnail)
-        self.header.pack_start(thumbnail_container)
 
         # Refresh button
         self.refresh_btn = Gtk.Button()
@@ -164,32 +135,26 @@ class WallPickerWindow(Adw.ApplicationWindow):
         self.refresh_btn.connect("clicked", self._on_refresh_clicked)
         self.header.pack_start(self.refresh_btn)
 
-        # Window title
-        self.window_title = Adw.WindowTitle(title="Wallpicker", subtitle="")
-        self.header.set_title_widget(self.window_title)
-
-        # Menu button (placeholder for now)
+        # Menu button
         self.menu_btn = Gtk.MenuButton()
         self.menu_btn.set_icon_name("open-menu-symbolic")
         self.menu_btn.add_css_class("flat")
         self.header.pack_end(self.menu_btn)
+
+        # Tab switcher bar (placed below header at top of content area)
+        self.switcher_bar = Adw.ViewSwitcherBar()
+        self.switcher_bar.set_reveal(True)
+        self.toolbar_view.add_top_bar(self.switcher_bar)
 
         # View stack for tabs
         self.stack = Adw.ViewStack()
         self.stack.set_hexpand(True)
         self.stack.set_vexpand(True)
 
-        # Wrap ViewStack in Adw.Clamp for optimal width constraint
-        # Clamp constrains content to 1400px max width with tightening at 1000px
-        clamp = Adw.Clamp()
-        clamp.set_maximum_size(1400)  # Max width: 1400px
-        clamp.set_tightening_threshold(1000)  # Start tightening at 1000px
-        clamp.set_child(self.stack)  # Wrap ViewStack
+        # Track tab names for keyboard navigation
+        self.tabs = ["local", "wallhaven", "favorites"]
 
-        # Set clamp as toolbar content
-        self.toolbar_view.set_content(clamp)
-
-        # Create views
+        # Create views (add_titled() auto-creates ViewSwitcherBar at bottom)
         self.local_view = LocalView(self.local_view_model, self.banner_service)
         local_page = self.stack.add_titled(self.local_view, "local", "Local")
         local_page.set_icon_name("folder-symbolic")
@@ -202,32 +167,20 @@ class WallPickerWindow(Adw.ApplicationWindow):
         favorites_page = self.stack.add_titled(self.favorites_view, "favorites", "Favorites")
         favorites_page.set_icon_name("starred-symbolic")
 
-        # Add view switcher bar at bottom
-        self.view_switcher_bar = Adw.ViewSwitcherBar()
-        self.view_switcher_bar.set_stack(self.stack)
-        self.view_switcher_bar.set_reveal(True)
-        self.toolbar_view.add_bottom_bar(self.view_switcher_bar)
+        # Connect ViewSwitcherBar to ViewStack
+        self.switcher_bar.set_stack(self.stack)
 
-        # Add banner widget between content and bottom bar
-        # Position: below Clamp, above ViewSwitcherBar
+        # Set stack as content (no Clamp - use full window width)
+        self.toolbar_view.set_content(self.stack)
+
+        # Banner at bottom
         self.toolbar_view.add_bottom_bar(self.banner_service.get_banner_widget())
 
         # Wrap toolbar view in toast overlay
-        # (ToastService already wraps window content, so set_toolbar_view as content)
-        # Actually, we need to set toolbar_view as the content, then wrap it
-        # Let me fix this - toast_service wraps existing content
-
-        # Set toolbar view as content
-        # The toast overlay was already created by ToastService
-        # We need to set toolbar_view as its child
-        # Get the toast overlay from toast_service
         self.toast_service.overlay.set_child(self.toolbar_view)
 
         # Connect stack change signal
         self.stack.connect("notify::visible-child", self._on_tab_changed)
-
-        # Load current wallpaper info
-        self._load_current_wallpaper_info()
 
         # Load initial data
         try:
@@ -272,120 +225,13 @@ class WallPickerWindow(Adw.ApplicationWindow):
             asyncio.run(reload_wallhaven())
             self.toast_service.show_info("Wallhaven wallpapers refreshed")
 
-    def set_current_wallpaper(self, wallpaper_name):
-        """Update window title with current wallpaper."""
-        self.window_title.set_subtitle(f"Current: {wallpaper_name}")
-
-    def _on_thumbnail_clicked(self, gesture, n_press, x, y):
-        """Open preview dialog when thumbnail clicked."""
-        if n_press == 1:
-            # Get current wallpaper path
-            current_path = self.wallpaper_setter.get_current_wallpaper()
-            if current_path:
-                self._open_preview_dialog(current_path)
-
-    def _load_current_wallpaper_info(self):
-        """Load info about currently set wallpaper."""
-        current_path = self.wallpaper_setter.get_current_wallpaper()
-        if current_path and Path(current_path).exists():
-            # Extract filename from path
-            filename = Path(current_path).name
-            self.window_title.set_subtitle(f"Current: {filename}")
-
-            # Load thumbnail
-            self._update_current_thumbnail(current_path)
-        else:
-            # Show placeholder if no current wallpaper
-            self.current_thumbnail.set_icon_name("image-missing-symbolic")
-            self.current_thumbnail.add_css_class("missing-thumb")
-
-    def _update_current_thumbnail(self, wallpaper_path: str):
-        """Load and display current wallpaper thumbnail."""
-
-        def on_thumbnail_loaded(texture):
-            if texture:
-                self.current_thumbnail.set_paintable(texture)
-                self.current_thumbnail.remove_css_class("missing-thumb")
-                # Animate change
-                self.current_thumbnail.add_css_class("thumbnail-updated")
-                GLib.timeout_add(
-                    300, lambda: self.current_thumbnail.remove_css_class("thumbnail-updated")
-                )
-
-        # Use wallhaven_view_model's thumbnail cache for loading
-        if hasattr(self.wallhaven_view_model, "thumbnail_cache"):
-            self.wallhaven_view_model.load_thumbnail_async(wallpaper_path, on_thumbnail_loaded)
-        else:
-            # Fallback: show placeholder
-            self.current_thumbnail.set_icon_name("image-missing-symbolic")
-            self.current_thumbnail.add_css_class("missing-thumb")
-
-    def _open_preview_dialog(self, wallpaper_path: str):
-        """Open preview dialog with current wallpaper."""
-        dialog = Adw.Window(
-            transient_for=self,
-            title="Current Wallpaper Preview",
-            default_width=800,
-            default_height=600,
-            modal=True,
-        )
-
-        # Create overlay layout
-        overlay = Gtk.Overlay()
-        overlay.set_vexpand(True)
-        overlay.set_hexpand(True)
-
-        # Create wallpaper image
-        image = Gtk.Picture()
-        image.set_vexpand(True)
-        image.set_hexpand(True)
-        image.set_content_fit(Gtk.ContentFit.CONTAIN)
-        image.add_css_class("preview-image")
-
-        def on_image_loaded(texture):
-            if texture:
-                image.set_paintable(texture)
-
-        # Load the full-size image
-        def load_full_image():
-            try:
-                from gi.repository import GdkPixbuf
-
-                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
-                    str(wallpaper_path), 1920, 1080, True
-                )
-                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
-                GLib.idle_add(lambda: on_image_loaded(texture) or False)
-            except Exception as e:
-                print(f"Failed to load image: {e}")
-                GLib.idle_add(lambda: on_image_loaded(None) or False)
-
-        self.local_view_model._executor.submit(load_full_image)
-        overlay.set_child(image)
-
-        # Close button
-        close_btn = Gtk.Button(icon_name="window-close-symbolic")
-        close_btn.add_css_class("circular")
-        close_btn.add_css_class("flat")
-        close_btn.set_valign(Gtk.Align.START)
-        close_btn.set_halign(Gtk.Align.END)
-        close_btn.set_margin_top(12)
-        close_btn.set_margin_end(12)
-        close_btn.connect("clicked", lambda _: dialog.close())
-        overlay.add_overlay(close_btn)
-
-        # Set content
-        dialog.set_content(overlay)
-        dialog.present()
-
     def _setup_gestures(self):
         """Setup touch gestures for the application"""
+        self._setup_swipe_gestures()
         self._setup_keyboard_navigation()
 
     def _setup_swipe_gestures(self):
         """Setup swipe gesture for tab switching."""
-        # Track tab names in order
-        self.tabs = ["local", "wallhaven", "favorites"]
 
         # Create swipe controller
         swipe = Gtk.GestureSwipe()

@@ -60,6 +60,101 @@
     animation: selection-pulse 2s ease-in-out;
 }
 
+.wallpaper-card.current-wallpaper {
+    border: 3px solid @success_color;
+    position: relative;
+}
+
+.wallpaper-card.current-wallpaper::before {
+    content: "";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    background: @success_color;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    animation: current-badge-pulse 2s ease-in-out infinite;
+}
+
+.wallpaper-card.current-wallpaper::after {
+    content: "✓";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+@keyframes current-badge-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 alpha(@success_color, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 6px alpha(@success_color, 0);
+    }
+}
+
+/* Current Wallpaper Indicator (subtle visual cue) */
+.wallpaper-card.current-wallpaper {
+    border: 3px solid @success_color;
+    position: relative;
+}
+
+.wallpaper-card.current-wallpaper::before {
+    content: "";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    background: @success_color;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    animation: current-badge-pulse 2s ease-in-out infinite;
+}
+
+.wallpaper-card.current-wallpaper::after {
+    content: "✓";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+@keyframes current-badge-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 alpha(@success_color, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 6px alpha(@success_color, 0);
+    }
+}
+
 @keyframes selection-pulse {
     0% {
         border-color: @accent_bg_color;

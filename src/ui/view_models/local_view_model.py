@@ -98,6 +98,9 @@ class LocalViewModel(BaseViewModel):
 
             result = self.wallpaper_setter.set_wallpaper(str(wallpaper.path))
 
+            if result:
+                self.emit("wallpaper-set", wallpaper.filename)
+
             return result
 
         except Exception as e:

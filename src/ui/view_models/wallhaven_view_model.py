@@ -212,6 +212,30 @@ class WallhavenViewModel(BaseViewModel):
         """Check if pagination navigation is available"""
         return self.has_next_page() or self.has_prev_page()
 
+    async def set_wallpaper(self, wallpaper: Wallpaper) -> bool:
+        """Set wallpaper as desktop background."""
+        try:
+            self.is_busy = True
+            self.error_message = None
+
+            if not wallpaper.path:
+                await self.download_wallpaper(wallpaper)
+
+            if wallpaper.path:
+                result = self.wallpaper_setter.set_wallpaper(wallpaper.path)
+                if result:
+                    filename = Path(wallpaper.path).name if wallpaper.path else wallpaper.id
+                    self.emit("wallpaper-set", filename)
+                return result
+
+            return False
+
+        except Exception as e:
+            self.error_message = f"Failed to set wallpaper: {e}"
+            return False
+        finally:
+            self.is_busy = False
+
     async def add_to_favorites(self, wallpaper: Wallpaper) -> bool:
         if not self.favorites_service:
             self.error_message = "Favorites service not available"

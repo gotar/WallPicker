@@ -12,8 +12,54 @@ A modern GTK4/Libadwaita wallpaper picker application. Browse and discover wallp
  - **Local Wallpaper Management**: Browse and manage wallpapers from your `~/Pictures` directory (or custom directory) with thumbnail previews
 - **Favorites System**: Save your favorite wallpapers for quick access across sessions
 - **Smart Thumbnail Caching**: Persistent disk-based caching for instant thumbnail loading with automatic cleanup
-- **Smooth Transitions**: Animated wallpaper changes using the `awww` utility
+- **Smooth Transitions**: Animated wallpaper changes using `awww` utility
 - **Modern UI**: Native GTK4/Libadwaita interface that integrates seamlessly with your desktop environment
+- **Preview Dialog**: Full-screen wallpaper preview with metadata, keyboard shortcuts, and quick actions
+
+### New in v2.0.0
+
+#### 🎨 UI/UX Redesign
+Complete visual overhaul with modern GTK4/Libadwaita components:
+- **Redesigned wallpaper cards** with hover animations and visual feedback
+- **Modern search and filter bar** with chips and responsive layout
+- **Preview dialog** with split-view layout and metadata sidebar
+- **Current wallpaper indicator** in header bar with animated thumbnail
+- **Native toast notifications** replacing inline error messages
+- **Selection mode** with multi-wallpaper operations
+- **Smooth transitions** throughout the interface
+- **Adaptive layouts** for all screen sizes (2-6 columns)
+
+#### ⌨️ Keyboard Navigation
+Complete keyboard access for power users:
+- Tab navigation: `Ctrl+1/2/3` or `Alt+1/2/3` for tabs
+- `Ctrl+Tab` / `Ctrl+Shift+Tab` for previous/next tab
+- `Ctrl+F` or `Ctrl+N` to focus search
+- Arrow keys to navigate grid
+- `Enter` to set wallpaper, `Space` to toggle favorite
+- `Ctrl+R` to refresh, `Ctrl+A` to select all
+- `F1` to view all keyboard shortcuts
+
+#### 👆 Touch Gestures
+Intuitive touch interactions:
+- Swipe left/right to switch tabs
+- Pull down to refresh content
+- Long-press on cards for context menu
+- Pinch-to-zoom in preview dialog (1x-5x)
+
+#### ☑️ Multi-Selection
+- Select wallpapers with `Ctrl/Cmd+Click`
+- Range selection with `Shift+Click`
+- `Ctrl/Cmd+A` to select all visible wallpapers
+- Selection banner with "Set All" action
+- Batch operations support
+
+#### ♿ Accessibility
+- WCAG 2.1 AA compliant (4.5:1 contrast minimum)
+- Screen reader labels on all interactive elements
+- High contrast theme support
+- Reduced motion preference support
+- Touch-friendly 44×44px minimum tap targets
+- Complete keyboard navigation
 
 ## Screenshots
 

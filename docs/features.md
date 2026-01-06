@@ -95,6 +95,78 @@ This document outlines the required features and expected behavior for the Wallp
 - Auto-refresh when switching to tab
 - Backwards compatibility with old favorites format
 
+## New in v2.0.0
+
+### Multi-Selection
+- Select wallpapers with Ctrl/Cmd+Click
+- Range selection with Shift+Click
+- Select all with Ctrl/Cmd+A
+- Selection banner with "Set All" action
+- Visual feedback on selected cards
+
+### Preview Dialog
+- Full-size preview with metadata sidebar
+- Split-view layout (image + metadata)
+- Responsive: side-by-side (>900px) or bottom sheet (<900px)
+- Actions: Set wallpaper, favorite, open externally, copy path, delete
+- Keyboard shortcuts: Escape (close), Enter (set), Space (favorite)
+- Pinch-to-zoom support (1x to 5x)
+- Double-click to close
+
+### Current Wallpaper Indicator
+- 32×32px thumbnail in header bar
+- Animated thumbnail changes (pop animation)
+- Window title shows current wallpaper
+- Click thumbnail to open preview
+- Visual feedback with pulse animation
+
+### Touch Gestures
+- Swipe left/right to switch tabs
+- Pull down to refresh content
+- Long-press on cards for context menu
+- Pinch-to-zoom in preview dialog
+
+### Keyboard Navigation
+- Tab navigation: Ctrl/Cmd+1/2/3 or Alt+1/2/3
+- Previous/next tab: Ctrl/Cmd+Tab or Ctrl/Cmd+Shift+Tab
+- Search focus: Ctrl/Cmd+F or Ctrl/Cmd+N
+- Grid navigation: Arrow keys to navigate cards
+- Activate: Enter (set wallpaper), Space (toggle favorite)
+- Actions: Ctrl/Cmd+R (refresh), Ctrl/Cmd+A (select all), Ctrl/Cmd+D (delete selected)
+- Shortcuts dialog: F1 to view all shortcuts
+
+### Accessibility
+- WCAG 2.1 AA compliant (4.5:1 contrast minimum)
+- Screen reader labels on all interactive elements
+- High contrast theme support
+- Reduced motion preference support
+- Touch-friendly 44×44px minimum tap targets
+- Complete keyboard navigation
+- Focus indicators (3px accent outline)
+
+### Banner Service
+- Selection banner showing selected count
+- Storage warning when cache nears limit
+- API quota warning for Wallhaven
+- Info banners for updates and announcements
+- Auto-positioning between content and view switcher
+- Smooth slide in/out animations
+
+### Adaptive Layout
+- Responsive grid columns (2-6 based on screen width)
+- Adw.Clamp for content width constraints (max 1400px)
+- Responsive filter bar (horizontal ↔ vertical)
+- Card sizing adapts to screen (180-220px thumbnails)
+- ViewSwitcherBar with auto-hide
+
+### Performance
+- Lazy thumbnail loading (visible 20 at a time)
+- 300ms search debounce
+- Memory cache (100MB) for 10x faster reloads
+- GPU-accelerated animations
+- Smooth 60fps scrolling
+- Reduced motion support
+
 ## Expected Behavior
 
 ### Startup

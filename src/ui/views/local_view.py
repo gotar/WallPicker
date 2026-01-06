@@ -8,64 +8,73 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import gi
 
 gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
 
-from gi.repository import Adw, GObject, Gtk
+from gi.repository import Adw, Gdk, GObject, Gtk
 
 from ui.view_models.local_view_model import LocalViewModel
 
 
-class LocalView(Gtk.Box):
-    """View for local wallpaper browsing"""
+class LocalView(Adw.BreakpointBin):
+    """View for local wallpaper browsing with adaptive layout"""
 
-    def __init__(self, view_model: LocalViewModel):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+    def __init__(self, view_model: LocalViewModel, banner_service=None):
+        super().__init__()
         self.view_model = view_model
+        self.banner_service = banner_service
+        self._last_selected_wallpaper = None
 
-        # Create UI components
+        self._create_ui()
+
+        self._setup_keyboard_shortcuts()
+        self._bind_to_view_model()
+
+    def _create_ui(self):
+        """Create main UI structure"""
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.set_child(self.main_box)
+
         self._create_toolbar()
         self._create_wallpaper_grid()
 
-        # Bind to ViewModel state
-        self._bind_to_view_model()
-
     def _create_toolbar(self):
         """Create toolbar with actions"""
-        toolbar = Gtk.Box(
+        self.toolbar = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=12,
         )
-        toolbar.add_css_class("filter-bar")
+        self.toolbar.add_css_class("filter-bar")
 
         # Refresh button
         refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh")
         refresh_btn.connect("clicked", self._on_refresh_clicked)
-        toolbar.append(refresh_btn)
+        self.toolbar.append(refresh_btn)
 
         # Folder button
         folder_btn = Gtk.Button(icon_name="folder-symbolic", tooltip_text="Choose folder")
         folder_btn.connect("clicked", self._on_folder_clicked)
-        toolbar.append(folder_btn)
+        self.toolbar.append(folder_btn)
 
         # Loading spinner
         self.loading_spinner = Gtk.Spinner(spinning=False)
-        toolbar.append(self.loading_spinner)
+        self.toolbar.append(self.loading_spinner)
 
         # Spacer
         spacer = Gtk.Label()
         spacer.set_hexpand(True)
-        toolbar.append(spacer)
+        self.toolbar.append(spacer)
 
         # Status label
         self.status_label = Gtk.Label(label="")
-        toolbar.append(self.status_label)
+        self.toolbar.append(self.status_label)
 
         # Error label
         self.error_label = Gtk.Label(wrap=True)
         self.error_label.add_css_class("error")
         self.error_label.set_visible(False)
-        toolbar.append(self.error_label)
+        self.toolbar.append(self.error_label)
 
-        self.append(toolbar)
+        self.main_box.append(self.toolbar)
 
     def update_status(self, count: int):
         """Update status label with wallpaper count"""
@@ -86,7 +95,7 @@ class LocalView(Gtk.Box):
         self.wallpaper_grid.set_selection_mode(Gtk.SelectionMode.NONE)
         self.scroll.set_child(self.wallpaper_grid)
 
-        self.append(self.scroll)
+        self.main_box.append(self.scroll)
 
     def _bind_to_view_model(self):
         GObject.Object.bind_property(
@@ -97,6 +106,164 @@ class LocalView(Gtk.Box):
             GObject.BindingFlags.DEFAULT,
         )
         self.view_model.connect("notify::wallpapers", self._on_wallpapers_changed)
+        self.view_model.connect("notify::selected-count", self._on_selection_changed)
+
+    def _setup_keyboard_shortcuts(self):
+        key_controller = Gtk.EventControllerKey()
+        key_controller.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(key_controller)
+
+        # Setup grid navigation
+        self._setup_grid_navigation()
+
+    def _setup_grid_navigation(self):
+        """Setup keyboard navigation for wallpaper grid."""
+        # Add key controller to flow box for arrow key navigation
+        grid_key_controller = Gtk.EventControllerKey()
+        grid_key_controller.connect("key-pressed", self._on_grid_key_pressed)
+        self.wallpaper_grid.add_controller(grid_key_controller)
+
+        # Track card->wallpaper mapping for keyboard activation
+        self.card_wallpaper_map = {}
+
+    def _on_grid_key_pressed(self, controller, keyval, keycode, state):
+        """Handle keyboard navigation within grid."""
+        # Arrow keys: Navigate between cards
+        if keyval == Gdk.KEY_Down:
+            self._focus_next_card()
+            return True
+        elif keyval == Gdk.KEY_Up:
+            self._focus_prev_card()
+            return True
+        elif keyval == Gdk.KEY_Right:
+            self._focus_next_card()
+            return True
+        elif keyval == Gdk.KEY_Left:
+            self._focus_prev_card()
+            return True
+        # Enter/Return: Set wallpaper
+        elif keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            focused = self.wallpaper_grid.get_focus_child()
+            if focused and focused in self.card_wallpaper_map:
+                wallpaper = self.card_wallpaper_map[focused]
+                self._on_set_wallpaper(None, wallpaper)
+            return True
+        # Space: Toggle favorite
+        elif keyval == Gdk.KEY_space:
+            focused = self.wallpaper_grid.get_focus_child()
+            if focused and focused in self.card_wallpaper_map:
+                wallpaper = self.card_wallpaper_map[focused]
+                self._on_add_to_favorites(None, wallpaper)
+            return True
+        # Escape: Clear selection and remove focus
+        elif keyval == Gdk.KEY_Escape:
+            self.view_model.clear_selection()
+            focused = self.wallpaper_grid.get_focus_child()
+            if focused:
+                focused.grab_remove()
+            return True
+        return False
+
+    def _focus_next_card(self):
+        """Focus next card in grid."""
+        current = self.wallpaper_grid.get_focus_child()
+        if not current:
+            # Focus first card if none focused
+            first = self.wallpaper_grid.get_first_child()
+            if first:
+                first.grab_focus()
+            return
+
+        # Get all children
+        children = []
+        child = self.wallpaper_grid.get_first_child()
+        while child:
+            children.append(child)
+            child = child.get_next_sibling()
+
+        if not children:
+            return
+
+        current_idx = children.index(current)
+        next_idx = (current_idx + 1) % len(children)
+        children[next_idx].grab_focus()
+
+    def _focus_prev_card(self):
+        """Focus previous card in grid."""
+        current = self.wallpaper_grid.get_focus_child()
+        if not current:
+            # Focus last card if none focused
+            last = self.wallpaper_grid.get_first_child()
+            while last and last.get_next_sibling():
+                last = last.get_next_sibling()
+            if last:
+                last.grab_focus()
+            return
+
+        # Get all children
+        children = []
+        child = self.wallpaper_grid.get_first_child()
+        while child:
+            children.append(child)
+            child = child.get_next_sibling()
+
+        if not children:
+            return
+
+        current_idx = children.index(current)
+        prev_idx = (current_idx - 1) % len(children)
+        children[prev_idx].grab_focus()
+
+    def _setup_pull_to_refresh(self):
+        """Setup pull-to-refresh gesture on scrolled window."""
+        self.is_refreshing = False
+
+        # Swipe controller for pull gesture
+        swipe = Gtk.GestureSwipe()
+        swipe.set_propagation_phase(Gtk.PropagationPhase.BUBBLE)
+        swipe.connect("swipe", self._on_pull_swipe)
+        self.scroll.add_controller(swipe)
+
+    def _on_pull_swipe(self, gesture, dx, dy):
+        """Handle pull-down gesture for refresh."""
+        # Only trigger on vertical pull (dy < 0) and near top of scroll
+        vadj = self.scroll.get_vadjustment()
+        current_value = vadj.get_value()
+
+        # Check if we're at the top of the scroll and pulling down
+        if dy < -100 and current_value < 50 and not self.is_refreshing:
+            self.is_refreshing = True
+            self.view_model.refresh_wallpapers()
+
+            # Reset flag after a delay
+            from gi.repository import GLib
+
+            GLib.timeout_add(1000, self._reset_refresh_flag)
+
+    def _on_key_pressed(self, controller, keyval, keycode, state):
+        if state & Gdk.ModifierType.CONTROL_MASK and keyval == Gdk.KEY_a:
+            self.view_model.select_all()
+            return True
+        elif keyval == Gdk.KEY_Escape:
+            self.view_model.clear_selection()
+            return True
+        return False
+
+    def _on_selection_changed(self, obj, pspec):
+        count = self.view_model.selected_count
+        if count > 0 and self.banner_service:
+            self.banner_service.show_selection_banner(
+                count=count, on_set_all=self._on_set_all_selected
+            )
+        elif count == 0 and self.banner_service:
+            self.banner_service.hide_selection_banner()
+
+    def _on_set_all_selected(self):
+        selected = self.view_model.get_selected_wallpapers()
+        for wallpaper in selected:
+            self.view_model.wallpaper_setter.set_wallpaper(str(wallpaper.path))
+            break
+        self.view_model.clear_selection()
 
     def _on_refresh_clicked(self, button):
         self.view_model.refresh_wallpapers()
@@ -127,6 +294,9 @@ class LocalView(Gtk.Box):
         while child := self.wallpaper_grid.get_first_child():
             self.wallpaper_grid.remove(child)
 
+        # Clear card->wallpaper mapping
+        self.card_wallpaper_map.clear()
+
         for wallpaper in wallpapers:
             card = self._create_wallpaper_card(wallpaper)
             self.wallpaper_grid.append(card)
@@ -135,6 +305,19 @@ class LocalView(Gtk.Box):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         card.set_size_request(220, 200)
         card.add_css_class("wallpaper-card")
+
+        # Make card focusable
+        card.set_can_focus(True)
+        card.set_focusable(True)
+
+        # Store mapping for keyboard activation
+        self.card_wallpaper_map[card] = wallpaper
+
+        is_selected = wallpaper in self.view_model.get_selected_wallpapers()
+        if is_selected:
+            card.add_css_class("selected")
+        if self.view_model.selection_mode:
+            card.add_css_class("selection-mode")
 
         image = Gtk.Picture()
         image.set_size_request(200, 160)
@@ -149,11 +332,28 @@ class LocalView(Gtk.Box):
 
         overlay = Gtk.Overlay()
         overlay.set_child(image)
+
+        checkbox = Gtk.CheckButton()
+        checkbox.add_css_class("selection-checkbox")
+        checkbox.set_halign(Gtk.Align.START)
+        checkbox.set_valign(Gtk.Align.START)
+        checkbox.set_margin_start(8)
+        checkbox.set_margin_top(8)
+        checkbox.set_active(is_selected)
+        if self.view_model.selection_mode:
+            checkbox.set_visible(True)
+        else:
+            checkbox.set_visible(False)
+        checkbox.connect(
+            "toggled", lambda cb: self._on_selection_toggled(wallpaper, cb.get_active())
+        )
+        overlay.add_overlay(checkbox)
+
         card.append(overlay)
 
         click = Gtk.GestureClick()
         click.set_button(1)
-        click.connect("pressed", self._on_card_double_clicked, wallpaper)
+        click.connect("pressed", self._on_card_clicked, wallpaper, card, checkbox)
         card.add_controller(click)
 
         actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -177,6 +377,17 @@ class LocalView(Gtk.Box):
 
         card.append(actions_box)
         return card
+
+    def _on_card_clicked(self, gesture, n_press, x, y, wallpaper, card, checkbox):
+        if self.view_model.selection_mode and n_press == 1:
+            checkbox.set_active(not checkbox.get_active())
+        elif n_press == 2:
+            self._on_set_wallpaper(None, wallpaper)
+            if self.view_model.selection_mode:
+                checkbox.set_active(not checkbox.get_active())
+
+    def _on_selection_toggled(self, wallpaper, is_selected):
+        self.view_model.toggle_selection(wallpaper)
 
     def _on_set_wallpaper(self, button, wallpaper):
         result = self.view_model.wallpaper_setter.set_wallpaper(str(wallpaper.path))
@@ -214,3 +425,8 @@ class LocalView(Gtk.Box):
 
         dialog.connect("response", on_response)
         dialog.present()
+
+    def _reset_refresh_flag(self):
+        """Reset refreshing flag."""
+        self.is_refreshing = False
+        return False

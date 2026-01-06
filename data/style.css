@@ -1,60 +1,1088 @@
+/* Modern CSS variables for consistent theming */
+:root {
+    /* Spacing scale (8-point system) */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+    --spacing-2xl: 32px;
+    
+    /* Card colors (system-aware) */
+    --card-bg-color: alpha(@window_fg_color, 0.03);
+    --card-hover-bg: alpha(@window_fg_color, 0.05);
+    --card-border-color: alpha(@window_fg_color, 0.1);
+    
+    /* Shadows */
+    --card-shadow: 0 2px 8px alpha(@window_fg_color, 0.15);
+    --card-shadow-hover: 0 8px 16px alpha(@window_fg_color, 0.25);
+    
+    /* Transitions */
+    --transition-fast: 150ms ease-out;
+    --transition-normal: 300ms ease-out;
+    --transition-slow: 500ms ease-out;
+    --transition-bounce: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Wallpaper Cards */
 .wallpaper-card {
+    background-color: var(--card-bg-color);
     border-radius: 12px;
-    border: 1px solid rgba(0, 0, 0, 0.15);
-    background-color: rgba(0, 0, 0, 0.03);
-    padding: 8px;
-    margin: 4px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transition: box-shadow 0.2s, border-color 0.2s;
+    border: 1px solid var(--card-border-color);
+    padding: var(--spacing-sm);
+    margin: var(--spacing-sm);
+    box-shadow: var(--card-shadow);
+    transition: transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1.0),
+                box-shadow 0.2s cubic-bezier(0.4, 0.0, 0.2, 1.0),
+                border-color 0.2s ease,
+                background-color 0.2s ease;
+    will-change: transform, opacity;
+    transform: translateZ(0);
+    contain: layout style;
 }
 
 .wallpaper-card:hover {
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    border-color: rgba(0, 0, 0, 0.25);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: var(--card-shadow-hover);
+    background-color: var(--card-hover-bg);
+    border-color: alpha(@window_fg_color, 0.15);
+}
+
+.wallpaper-card:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: var(--card-shadow);
+    transition-duration: 100ms;
+}
+
+.wallpaper-card.selected {
+    border: 2px solid @accent_bg_color;
+    box-shadow: 0 0 0 4px @accent_color;
+    animation: selection-pulse 2s ease-in-out;
+}
+
+@keyframes selection-pulse {
+    0% {
+        border-color: @accent_bg_color;
+        box-shadow: 0 0 0 0 @accent_color;
+    }
+    50% {
+        border-color: @accent_bg_color;
+        box-shadow: 0 0 0 6px @accent_color;
+    }
+    100% {
+        border-color: @accent_bg_color;
+        box-shadow: 0 0 0 0 @accent_color;
+    }
+}
+
+/* Selection Checkbox */
+.wallpaper-card .selection-checkbox {
+    min-width: 20px;
+    min-height: 20px;
+    margin: 8px;
+    background-color: alpha(@window_bg_color, 0.9);
+    border: 2px solid @window_fg_color;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.wallpaper-card.selection-mode .selection-checkbox {
+    opacity: 1;
+}
+
+.wallpaper-card .selection-checkbox:checked {
+    background-color: @accent_bg_color;
+    border-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+.wallpaper-card .selection-checkbox:hover {
+    background-color: alpha(@window_fg_color, 0.1);
+}
+
+.wallpaper-card:focus:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 3px;
+    transition: outline-color 0.2s ease, outline-width 0.2s ease;
+    animation: focus-pulse 0.5s ease;
+}
+
+@keyframes focus-pulse {
+    0% {
+        outline-color: @accent_bg_color;
+    }
+    50% {
+        outline-color: alpha(@accent_bg_color, 0.5);
+    }
+    100% {
+        outline-color: @accent_bg_color;
+    }
+}
+
+*:focus:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 3px;
+    transition: outline-color 0.2s ease, outline-width 0.2s ease;
+    animation: focus-pulse 0.5s ease;
 }
 
 .wallpaper-thumb {
-    object-fit: fill;
+    object-fit: cover;
     max-width: 180px;
     max-height: 180px;
+    border-radius: 8px;
 }
 
+/* Action Buttons */
 .action-button {
     min-width: 80px;
     padding: 6px 12px;
     border-radius: 6px;
     font-size: 12px;
-    background: rgba(0, 0, 0, 0.1);
-    color: white;
-    transition: background 0.15s;
+    background: alpha(@window_fg_color, 0.1);
+    color: @window_fg_color;
+    transition: background var(--transition-fast);
 }
 
 .action-button:hover {
-    background: rgba(0, 0, 0, 0.2);
+    background: alpha(@window_fg_color, 0.2);
+}
+
+.action-button.suggested-action {
+    background: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+.action-button.suggested-action:hover {
+    background: shade(@accent_bg_color, 1.1);
 }
 
 .destructive-action {
-    background: #e51a4a;
+    background: @destructive_bg_color;
+    color: @destructive_fg_color;
 }
 
 .destructive-action:hover {
-    background: #c0392b;
+    background: shade(@destructive_bg_color, 0.9);
 }
 
+/* Error Display */
 .error {
-    color: #e51a4a;
+    color: @error_color;
     font-size: 12px;
-    padding: 8px 12px;
+    padding: var(--spacing-sm) var(--spacing-md);
     border-radius: 6px;
-    background: rgba(249, 46, 46, 0.1);
+    background: alpha(@error_color, 0.1);
+    margin: var(--spacing-md);
 }
 
+/* Filter Bar */
 .filter-bar {
-    padding: 12px;
+    padding: var(--spacing-md);
+    background: @headerbar_bg_color;
+    border-bottom: 1px solid alpha(@window_fg_color, 0.08);
 }
 
+/* Search Filter Bar */
+.search-filter-bar {
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: alpha(@window_bg_color, 0.8);
+    border-bottom: 1px solid alpha(@window_fg_color, 0.08);
+}
+
+.search-filter-bar Gtk.SearchEntry {
+    border-radius: 8px;
+    min-height: 36px;
+}
+
+.search-filter-bar Gtk.DropDown {
+    border-radius: 8px;
+    min-height: 36px;
+    min-width: 140px;
+}
+
+/* Filter Chips */
+.filter-chips {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background: alpha(@window_bg_color, 0.9);
+    border-bottom: 1px solid alpha(@window_fg_color, 0.06);
+}
+
+.filter-chip {
+    background: alpha(@accent_bg_color, 0.15);
+    border: 1px solid alpha(@accent_bg_color, 0.3);
+    border-radius: 18px;
+    padding: 4px 12px;
+    transition: all 0.2s ease;
+    animation: chip-appear 0.3s ease-out;
+    will-change: transform, opacity;
+    transform: translateZ(0);
+}
+
+.filter-chip.chip-removing {
+    animation: chip-remove 0.2s ease-in forwards;
+}
+
+@keyframes chip-appear {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1.0);
+        opacity: 1;
+    }
+}
+
+@keyframes chip-remove {
+    to {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+}
+
+.filter-chip:hover {
+    background: alpha(@accent_bg_color, 0.25);
+    border-color: alpha(@accent_bg_color, 0.5);
+}
+
+.filter-chip label {
+    font-size: 12px;
+    font-weight: 500;
+    color: @accent_color;
+}
+
+.filter-chip-remove {
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    margin: 0;
+    border-radius: 50%;
+    opacity: 0.7;
+}
+
+.filter-chip-remove:hover {
+    background: alpha(@destructive_bg_color, 0.2);
+    opacity: 1;
+}
+
+.filter-chip-remove image {
+    -gtk-icon-size: 14px;
+}
+
+/* Filter Panel */
+.filter-panel {
+    min-width: 320px;
+    max-width: 400px;
+}
+
+.filter-panel .heading {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: @dim_label_color;
+    margin-bottom: var(--spacing-sm);
+}
+
+.filter-panel Gtk.CheckButton {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: 6px;
+}
+
+.filter-panel Gtk.CheckButton:hover {
+    background: alpha(@window_fg_color, 0.05);
+}
+
+.filter-panel Gtk.DropDown {
+    margin-bottom: var(--spacing-md);
+    border-radius: 8px;
+    min-height: 36px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+    .search-filter-bar {
+        flex-wrap: wrap;
+    }
+
+    .search-filter-bar Gtk.SearchEntry {
+        width: 100%;
+        order: 1;
+    }
+
+    .search-filter-bar Gtk.DropDown {
+        flex: 1;
+        min-width: 120px;
+    }
+
+    .filter-chips {
+        flex-wrap: wrap;
+    }
+}
+
+/* Status Bar */
 .status-bar {
     font-size: 12px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.7);
+    color: @dim_label_color;
+    padding: var(--spacing-sm) var(--spacing-md);
+}
+
+/* Status Page Styles */
+.status-page.compact {
+    padding: var(--spacing-xl);
+}
+
+.status-page image {
+    color: @dim_label_color;
+    transition: transform 0.3s ease;
+}
+
+.status-page:hover image {
+    transform: scale(1.05);
+}
+
+/* Responsive Grid Adjustments */
+@media (max-width: 600px) {
+    .wallpaper-thumb {
+        max-width: 100%;
+        max-height: 140px;
+    }
+    
+    .action-button {
+        min-width: 60px;
+        font-size: 11px;
+        padding: 4px 8px;
+    }
+}
+
+/* Dark mode enhancements */
+.dark .wallpaper-card {
+    background-color: alpha(@window_fg_color, 0.05);
+}
+
+/* ViewSwitcherBar auto-hide on wide screens */
+.auto-hide-wide {
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+@media (min-width: 700px) {
+    .auto-hide-wide {
+        opacity: 0;
+    }
+}
+
+/* Adaptive Layout Media Queries */
+
+/* Narrow screens (< 600px) */
+@media (max-width: 600px) {
+    .wallpaper-card {
+        width: 100%;
+        min-width: unset;
+        padding: var(--spacing-sm);
+    }
+
+    .wallpaper-thumb {
+        max-width: 100%;
+        max-height: 140px;
+    }
+
+    .filter-bar {
+        flex-wrap: wrap;
+    }
+
+    .action-button {
+        min-width: 60px;
+        font-size: 11px;
+        padding: 4px 8px;
+    }
+}
+
+/* Medium screens (600-900px) */
+@media (min-width: 600px) and (max-width: 900px) {
+    .wallpaper-card {
+        width: 280px;
+    }
+
+    .wallpaper-thumb {
+        max-height: 180px;
+    }
+}
+
+/* Wide screens (900-1200px) */
+@media (min-width: 900px) and (max-width: 1200px) {
+    .wallpaper-card {
+        width: 280px;
+    }
+
+    .wallpaper-thumb {
+        max-height: 200px;
+    }
+
+    .filter-bar {
+        flex-wrap: nowrap;
+    }
+}
+
+/* Ultra-wide screens (> 1200px) */
+@media (min-width: 1200px) {
+    .wallpaper-card {
+        width: 280px;
+    }
+
+    .wallpaper-thumb {
+        max-height: 220px;
+    }
+
+    .filter-bar {
+        flex-wrap: nowrap;
+    }
+}
+
+/* Filter bar orientation adaptation */
+@media (max-width: 900px) {
+    .filter-bar.vertical {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filter-bar.vertical > * {
+        width: 100%;
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .filter-bar.vertical Gtk.Entry,
+    .filter-bar.vertical Gtk.SearchEntry {
+        width: 100%;
+    }
+}
+
+.dark .wallpaper-card:hover {
+    background-color: alpha(@window_fg_color, 0.08);
+}
+
+/* Animation for current wallpaper indicator */
+@keyframes pulse-border {
+    0% { box-shadow: 0 0 0 0 @accent_bg_color; }
+    70% { box-shadow: 0 0 0 6px alpha(@accent_bg_color, 0); }
+    100% { box-shadow: 0 0 0 0 alpha(@accent_bg_color, 0); }
+}
+
+.wallpaper-card.current {
+    animation: pulse-border 2s ease-in-out;
+}
+
+/* Banner Styles */
+.banner {
+    font-size: 13px;
+    border-radius: 0;
+    transition: max-height 0.3s ease, opacity 0.3s ease,
+                transform 0.3s ease;
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-20px);
+}
+
+.banner.visible {
+    max-height: 100px;
+    opacity: 1;
+    transform: translateY(0);
+    will-change: transform, opacity;
+}
+
+.banner.warning-banner {
+    background-color: alpha(@warning_color, 0.15);
+    color: @warning_fg_color;
+}
+
+.banner.warning-banner button {
+    background-color: @warning_bg_color;
+    color: @warning_fg_color;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.banner.warning-banner button:hover {
+    background-color: shade(@warning_bg_color, 1.1);
+}
+
+.banner.info-banner {
+    background-color: alpha(@info_color, 0.1);
+    color: @info_fg_color;
+}
+
+.banner.info-banner button {
+    background-color: alpha(@info_bg_color, 0.2);
+    color: @info_fg_color;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.banner.info-banner button:hover {
+    background-color: alpha(@info_bg_color, 0.3);
+}
+
+.banner.selection-banner {
+    background-color: alpha(@accent_bg_color, 0.1);
+    color: @accent_fg_color;
+}
+
+.banner.selection-banner button {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.banner.selection-banner button:hover {
+    background-color: shade(@accent_bg_color, 1.1);
+}
+
+/* Banner container for ToolbarView integration */
+.banner-container {
+    border-bottom: 1px solid alpha(@window_fg_color, 0.1);
+}
+
+/* Preview Dialog Styles */
+.preview-dialog {
+    min-width: 800px;
+    min-height: 600px;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.preview-image-container {
+    background: #000;
+    padding: 24px;
+}
+
+.preview-image {
+    border-radius: 8px;
+    transition: transform 0.3s ease;
+}
+
+.preview-image.loading {
+    opacity: 0.5;
+    transform: scale(0.95);
+}
+
+.preview-sidebar {
+    min-width: 300px;
+    max-width: 400px;
+    padding: var(--spacing-lg);
+}
+
+.preview-sidebar Adw.PreferencesGroup {
+    margin-bottom: var(--spacing-md);
+}
+
+/* Large pill buttons */
+.pill {
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+/* Responsive adjustments for preview dialog */
+@media (max-width: 900px) {
+    .preview-dialog {
+        presentation-mode: bottom-sheet;
+    }
+    
+    .preview-image-container {
+        padding: var(--spacing-md);
+    }
+    
+    .preview-sidebar {
+        min-width: 100%;
+        max-width: 100%;
+    }
+}
+
+/* Dark mode preview dialog */
+.dark .preview-image-container {
+    background: #1a1a1a;
+}
+
+/* Current Wallpaper Thumbnail in Header Bar */
+.current-wallpaper-thumbnail {
+    padding: 4px;
+    margin-right: 8px;
+    border-radius: 8px;
+    background: alpha(@card_bg_color, 0.5);
+    border: 1px solid alpha(@window_fg_color, 0.1);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.current-wallpaper-thumbnail:hover {
+    background: alpha(@window_fg_color, 0.08);
+    border-color: alpha(@window_fg_color, 0.2);
+    transform: scale(1.05);
+}
+
+.current-thumb {
+    border-radius: 6px;
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+                opacity 0.4s ease;
+    will-change: transform, opacity;
+    transform: translateZ(0);
+}
+
+.current-thumb.thumbnail-updated {
+    animation: thumbnail-pop 0.5s ease-out;
+}
+
+@keyframes thumbnail-pop {
+    0% {
+        transform: scale(1.0);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.3) rotate(10deg);
+        opacity: 0.5;
+    }
+    100% {
+        transform: scale(1.0);
+        opacity: 1;
+    }
+}
+
+.current-thumb.missing-thumb {
+    opacity: 0.5;
+    background: alpha(@warning_color, 0.1);
+}
+
+/* Touch-Friendly Button Sizes */
+.action-button {
+    min-height: 44px;
+    min-width: 88px;
+    padding: 12px 16px;
+    transition: background var(--transition-fast), transform 0.1s ease;
+}
+
+.fav-btn {
+    min-width: 44px;
+    min-height: 44px;
+    transition: transform 0.1s ease;
+}
+
+.wallpaper-thumb {
+    min-width: 200px;
+    min-height: 200px;
+}
+
+/* Active touch states for cards */
+.wallpaper-card:active {
+    transform: scale(0.97);
+    opacity: 0.8;
+    transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+/* Touch feedback for buttons */
+.action-button:active {
+    transform: scale(0.95);
+    transition: transform 0.1s ease;
+}
+
+/* Swipe indicator */
+.swipe-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: @accent_bg_color;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.swipe-indicator.active {
+    opacity: 1;
+}
+
+/* Pull-to-refresh spinner */
+.refresh-spinner {
+    padding: 16px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.refresh-spinner.active {
+    opacity: 1;
+}
+
+/* Touch feedback overlay */
+.touch-feedback {
+    transition: transform 0.1s ease, opacity 0.1s ease;
+}
+
+.touch-feedback:active {
+    transform: scale(0.98);
+    opacity: 0.8;
+}
+
+/* Zoom levels for preview dialog */
+.zoom-100 { transform: scale(1.0); }
+.zoom-125 { transform: scale(1.25); }
+.zoom-150 { transform: scale(1.5); }
+.zoom-175 { transform: scale(1.75); }
+.zoom-200 { transform: scale(2.0); }
+.zoom-250 { transform: scale(2.5); }
+.zoom-300 { transform: scale(3.0); }
+.zoom-400 { transform: scale(4.0); }
+.zoom-500 { transform: scale(5.0); }
+
+/* Adw.Clamp Styling */
+clamp {
+    halign: center;
+}
+
+/* Clamp automatically centers content and handles width constraints
+ * No additional CSS needed for the tightening effect - it's native
+ * to Adw.Clamp behavior */
+
+.loading-spinner {
+    opacity: 0.7;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.status-page {
+    animation: fade-in 0.3s ease-out;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.wallpaper-card,
+.current-thumb,
+.filter-chip,
+.banner {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+@media (update: fast) {
+    .wallpaper-card {
+        transition-duration: 0.15s;
+    }
+
+    .filter-chip {
+        transition-duration: 0.15s;
+    }
+
+    .current-thumb {
+        transition-duration: 0.25s;
+    }
+}
+
+viewstack {
+    transition-duration: 300ms;
+}
+
+toast {
+    transition-duration: 300ms;
+}
+
+@keyframes toast-slide-up {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* ============================================================================
+   ACCESSIBILITY: Focus Indicators
+   ============================================================================ */
+
+/* Strong, visible focus indicators for all interactive elements */
+*:focus-visible {
+    outline: 3px solid @accent_bg_color !important;
+    outline-offset: 3px;
+    outline-style: solid;
+}
+
+/* Enhanced card focus indicator with shadow */
+.wallpaper-card:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 4px;
+    border-radius: 14px;
+    box-shadow: 0 0 0 6px alpha(@accent_bg_color, 0.3);
+}
+
+/* Button focus indicators */
+.action-button:focus-visible,
+button:focus-visible,
+Gtk.Button:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 2px;
+    border-radius: 8px;
+}
+
+/* Dropdown and entry focus */
+Gtk.DropDown:focus-visible,
+Gtk.Entry:focus-visible,
+Gtk.SearchEntry:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+/* Checkbox focus */
+.checkbutton:focus-visible,
+Gtk.CheckButton:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Focus ring animation for visual feedback */
+@keyframes focus-ring-pulse {
+    0% { outline-color: @accent_bg_color; }
+    50% { outline-color: alpha(@accent_bg_color, 0.6); }
+    100% { outline-color: @accent_bg_color; }
+}
+
+*:focus-visible {
+    animation: focus-ring-pulse 1.5s ease-in-out;
+}
+
+/* ============================================================================
+   ACCESSIBILITY: High Contrast Theme Support
+   ============================================================================ */
+
+.high-contrast .wallpaper-card {
+    border: 2px solid @window_fg_color;
+    box-shadow: none;
+}
+
+.high-contrast .wallpaper-card:hover {
+    border: 2px solid @window_fg_color;
+    background: alpha(@window_fg_color, 0.1);
+}
+
+.high-contrast .wallpaper-card:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    background: alpha(@window_bg_color, 0.1);
+}
+
+.high-contrast .wallpaper-card.selected {
+    border: 3px solid @accent_bg_color;
+    box-shadow: none;
+}
+
+.high-contrast .action-button {
+    border: 2px solid @window_fg_color;
+}
+
+.high-contrast .action-button:hover {
+    border: 3px solid @window_fg_color;
+}
+
+.high-contrast .filter-chip {
+    border: 2px solid @window_fg_color;
+    background: @window_bg_color;
+}
+
+.high-contrast .filter-chip:hover {
+    border: 3px solid @accent_bg_color;
+}
+
+.high-contrast .caption,
+.high-contrast .filename-label,
+.high-contrast .dim-label {
+    color: @window_fg_color;
+}
+
+.high-contrast .banner {
+    border: 2px solid @window_fg_color;
+}
+
+.high-contrast .error {
+    border: 2px solid @error_color;
+}
+
+.high-contrast .preview-image-container {
+    border: 2px solid @window_fg_color;
+}
+
+/* ============================================================================
+   ACCESSIBILITY: Reduced Motion Support
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    /* Disable all non-essential animations */
+    .wallpaper-card,
+    .filter-chip,
+    .banner,
+    .current-thumb,
+    .wallpaper-thumb,
+    .action-button,
+    .preview-dialog,
+    .status-page image,
+    .preview-image {
+        transition: none !important;
+        animation: none !important;
+    }
+
+    /* Keep essential transitions but make them instant */
+    viewstack,
+    .wallpaper-card,
+    .filter-chip {
+        transition-duration: 0.01ms !important;
+    }
+
+    /* Disable focus ring animation in reduced motion */
+    *:focus-visible {
+        animation: none !important;
+    }
+
+    /* Disable pulse animation */
+    .wallpaper-card.current {
+        animation: none !important;
+        border: 2px solid @accent_bg_color;
+    }
+
+    .status-page:hover image {
+        transform: none !important;
+    }
+
+    .wallpaper-card:hover {
+        transform: none !important;
+    }
+}
+
+/* ============================================================================
+   ACCESSIBILITY: Text Scaling Support
+   ============================================================================ */
+
+/* Use relative units that respect system font size */
+.wallpaper-card .filename-label {
+    font-size: 0.875rem;  /* Relative to system font */
+    min-height: 1.4rem;  /* Ensure minimum touch target size */
+}
+
+.wallpaper-thumb {
+    /* Use system font for accessible sizing */
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body,
+window,
+application {
+    font-size: 1rem;  /* Respects system font size setting */
+}
+
+.caption,
+.dim-label,
+.label {
+    /* Ensure minimum font size for readability */
+    font-size: 0.875rem;
+    min-height: 1.2rem;
+    line-height: 1.4;
+}
+
+/* Larger text for headings */
+.heading,
+.category-label,
+.resolution-label {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+/* ============================================================================
+   ACCESSIBILITY: Color Contrast Improvements
+   ============================================================================ */
+
+/* Ensure text has sufficient contrast (WCAG AA: 4.5:1) */
+.error {
+    color: @error_color;
+    background: alpha(@error_color, 0.15);
+    font-weight: 600;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: 6px;
+    margin: var(--spacing-md);
+}
+
+.dim-label {
+    opacity: 0.7;  /* At least 70% opacity for readability */
+    color: @window_fg_color;
+}
+
+/* Interactive element indicators */
+button,
+.action-button,
+Gtk.Button {
+    cursor: pointer;
+    min-height: 44px;  /* Touch-friendly minimum size */
+    min-width: 44px;
+}
+
+/* Cards are interactive */
+.wallpaper-card {
+    cursor: pointer;
+}
+
+/* Ensure tooltips are readable */
+tooltip {
+    background: @popover_bg_color;
+    color: @popover_fg_color;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.875rem;
+    max-width: 300px;
+}
+
+/* ============================================================================
+   KEYBOARD SHORTCUTS DIALOG
+   ============================================================================ */
+
+.shortcuts-dialog {
+    max-width: 700px;
+}
+
+.shortcut-key {
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 13px;
+    color: @accent_color;
+    background: alpha(@accent_bg_color, 0.1);
+    padding: 4px 8px;
+    border-radius: 4px;
 }

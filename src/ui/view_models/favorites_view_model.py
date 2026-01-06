@@ -153,6 +153,10 @@ class FavoritesViewModel(BaseViewModel):
             self.error_message = None
 
             result = self.wallpaper_setter.set_wallpaper(favorite.wallpaper.path)
+
+            if result:
+                self.emit("wallpaper-set", favorite.wallpaper.name)
+
             return result
 
         except Exception as e:

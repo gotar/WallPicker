@@ -5,81 +5,77 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-"""View for local wallpaper browsing."""
-
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, GObject, Gtk
+from gi.repository import Adw, Gdk, GLib, GObject, Gtk
 
 from ui.view_models.favorites_view_model import FavoritesViewModel
 
 
-class FavoritesView(Gtk.Box):
-    """View for favorites wallpaper browsing"""
+class FavoritesView(Adw.Bin):
+    """View for favorites wallpaper browsing with adaptive layout"""
 
-    def __init__(self, view_model: FavoritesViewModel):
+    def __init__(self, view_model: FavoritesViewModel, banner_service=None):
         print(f"DEBUG: FavoritesView.__init__ called with view_model: {view_model}")
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        super().__init__()
         self.view_model = view_model
+        self.banner_service = banner_service
+        self._last_selected_wallpaper = None
 
-        # Debug: Check view properties
-        print(
-            f"DEBUG: FavoritesView created - visible: {self.get_visible()}, sensitive: {self.get_sensitive()}, can_focus: {self.get_can_focus()}"
-        )
-
-        # Ensure view can receive events
         self.set_sensitive(True)
         self.set_can_focus(True)
         self.set_focusable(True)
 
-        # Create UI components
-        self._create_toolbar()
-        self._create_wallpapers_grid()
-        self._create_status_bar()
+        self._create_ui()
 
-        # Bind to ViewModel state
+        self._setup_keyboard_shortcuts()
+        self._setup_pull_to_refresh()
         self._bind_to_view_model()
 
         print(
             f"DEBUG: FavoritesView setup complete - visible: {self.get_visible()}, sensitive: {self.get_sensitive()}"
         )
 
+    def _create_ui(self):
+        """Create main UI structure"""
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.set_child(self.main_box)
+
+        self._create_toolbar()
+        self._create_wallpapers_grid()
+        self._create_status_bar()
+
     def _create_toolbar(self):
         """Create toolbar with actions"""
-        toolbar = Gtk.Box(
+        self.toolbar = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=12,
         )
-        toolbar.add_css_class("filter-bar")
+        self.toolbar.add_css_class("filter-bar")
 
         # Refresh button
         refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh")
         refresh_btn.connect("clicked", self._on_refresh_clicked)
-        toolbar.append(refresh_btn)
+        self.toolbar.append(refresh_btn)
 
         # Loading spinner
         self.loading_spinner = Gtk.Spinner(spinning=False)
-        toolbar.append(self.loading_spinner)
+        self.toolbar.append(self.loading_spinner)
 
         # Spacer
         spacer = Gtk.Label()
         spacer.set_hexpand(True)
-        toolbar.append(spacer)
+        self.toolbar.append(spacer)
 
         # Search entry
         self.search_entry = Gtk.SearchEntry(placeholder_text="Search favorites...")
         self.search_entry.connect("search-changed", self._on_search_changed)
-        toolbar.append(self.search_entry)
+        self.toolbar.append(self.search_entry)
 
-        self.append(toolbar)
+        self.main_box.append(self.toolbar)
 
     def _create_wallpapers_grid(self):
         """Create wallpapers grid display"""
@@ -96,21 +92,182 @@ class FavoritesView(Gtk.Box):
         self.wallpapers_grid.set_selection_mode(Gtk.SelectionMode.NONE)
         self.scroll.set_child(self.wallpapers_grid)
 
-        self.append(self.scroll)
+        self.main_box.append(self.scroll)
 
     def _create_status_bar(self):
         """Create status bar"""
         self.status_label = Gtk.Label(label="")
-        self.append(self.status_label)
+        self.main_box.append(self.status_label)
 
     def _bind_to_view_model(self):
         """Bind to ViewModel state changes"""
         self.view_model.connect("notify::favorites", self._on_favorites_changed)
         self.view_model.connect("notify::is-busy", self._on_busy_changed)
         self.view_model.connect("notify::error-message", self._on_error_changed)
+        self.view_model.connect("notify::selected-count", self._on_selection_changed)
 
-        # Initial data load
         self._on_favorites_changed()
+
+    def _setup_keyboard_shortcuts(self):
+        key_controller = Gtk.EventControllerKey()
+        key_controller.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(key_controller)
+
+        # Setup grid navigation
+        self._setup_grid_navigation()
+
+    def _setup_grid_navigation(self):
+        """Setup keyboard navigation for wallpapers grid."""
+        # Add key controller to flow box for arrow key navigation
+        grid_key_controller = Gtk.EventControllerKey()
+        grid_key_controller.connect("key-pressed", self._on_grid_key_pressed)
+        self.wallpapers_grid.add_controller(grid_key_controller)
+
+        # Track card->wallpaper mapping for keyboard activation
+        self.card_wallpaper_map = {}
+
+    def _on_key_pressed(self, controller, keyval, keycode, state):
+        """Handle keyboard shortcuts at view level."""
+        if state & Gdk.ModifierType.CONTROL_MASK and keyval == Gdk.KEY_a:
+            self.view_model.select_all()
+            return True
+        elif keyval == Gdk.KEY_Escape:
+            self.view_model.clear_selection()
+            return True
+        return False
+
+    def _on_grid_key_pressed(self, controller, keyval, keycode, state):
+        """Handle keyboard navigation within grid."""
+        # Arrow keys: Navigate between cards
+        if keyval == Gdk.KEY_Down:
+            self._focus_next_card()
+            return True
+        elif keyval == Gdk.KEY_Up:
+            self._focus_prev_card()
+            return True
+        elif keyval == Gdk.KEY_Right:
+            self._focus_next_card()
+            return True
+        elif keyval == Gdk.KEY_Left:
+            self._focus_prev_card()
+            return True
+        # Enter/Return: Set wallpaper
+        elif keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            focused = self.wallpapers_grid.get_focus_child()
+            if focused and focused in self.card_wallpaper_map:
+                wallpaper = self.card_wallpaper_map[focused]
+                self.view_model.set_wallpaper(wallpaper)
+            return True
+        # Space: Toggle favorite (remove from favorites)
+        elif keyval == Gdk.KEY_space:
+            focused = self.wallpapers_grid.get_focus_child()
+            if focused and focused in self.card_wallpaper_map:
+                wallpaper = self.card_wallpaper_map[focused]
+                self.view_model.remove_favorite(wallpaper)
+            return True
+        # Escape: Clear selection and remove focus
+        elif keyval == Gdk.KEY_Escape:
+            self.view_model.clear_selection()
+            focused = self.wallpapers_grid.get_focus_child()
+            if focused:
+                focused.grab_remove()
+            return True
+        return False
+
+    def _focus_next_card(self):
+        """Focus next card in grid."""
+        current = self.wallpapers_grid.get_focus_child()
+        if not current:
+            # Focus first card if none focused
+            first = self.wallpapers_grid.get_first_child()
+            if first:
+                first.grab_focus()
+            return
+
+        # Get all children
+        children = []
+        child = self.wallpapers_grid.get_first_child()
+        while child:
+            children.append(child)
+            child = child.get_next_sibling()
+
+        if not children:
+            return
+
+        current_idx = children.index(current)
+        next_idx = (current_idx + 1) % len(children)
+        children[next_idx].grab_focus()
+
+    def _focus_prev_card(self):
+        """Focus previous card in grid."""
+        current = self.wallpapers_grid.get_focus_child()
+        if not current:
+            # Focus last card if none focused
+            last = self.wallpapers_grid.get_first_child()
+            while last and last.get_next_sibling():
+                last = last.get_next_sibling()
+            if last:
+                last.grab_focus()
+            return
+
+        # Get all children
+        children = []
+        child = self.wallpapers_grid.get_first_child()
+        while child:
+            children.append(child)
+            child = child.get_next_sibling()
+
+        if not children:
+            return
+
+        current_idx = children.index(current)
+        prev_idx = (current_idx - 1) % len(children)
+        children[prev_idx].grab_focus()
+
+    def _setup_pull_to_refresh(self):
+        """Setup pull-to-refresh gesture on scrolled window."""
+        self.is_refreshing = False
+
+        # Swipe controller for pull gesture
+        swipe = Gtk.GestureSwipe()
+        swipe.set_propagation_phase(Gtk.PropagationPhase.BUBBLE)
+        swipe.connect("swipe", self._on_pull_swipe)
+        self.scroll.add_controller(swipe)
+
+    def _on_pull_swipe(self, gesture, dx, dy):
+        """Handle pull-down gesture for refresh."""
+        # Only trigger on vertical pull (dy < 0) and near top of scroll
+        vadj = self.scroll.get_vadjustment()
+        current_value = vadj.get_value()
+
+        # Check if we're at the top of scroll and pulling down
+        if dy < -100 and current_value < 50 and not self.is_refreshing:
+            self.is_refreshing = True
+            self.view_model.load_favorites()
+
+            # Reset flag after a delay
+            GLib.timeout_add(1000, self._reset_refresh_flag)
+
+    def _reset_refresh_flag(self):
+        """Reset refreshing flag."""
+        self.is_refreshing = False
+        return False
+
+    def _on_selection_changed(self, obj, pspec):
+        count = self.view_model.selected_count
+        if count > 0 and self.banner_service:
+            self.banner_service.show_selection_banner(
+                count=count, on_set_all=self._on_set_all_selected
+            )
+        elif count == 0 and self.banner_service:
+            self.banner_service.hide_selection_banner()
+
+    def _on_set_all_selected(self):
+        selected = self.view_model.get_selected_wallpapers()
+        for favorite in selected:
+            self.view_model.set_wallpaper(favorite)
+            break
+        self.view_model.clear_selection()
 
     def _on_refresh_clicked(self, button):
         """Handle refresh button click"""
@@ -149,6 +306,9 @@ class FavoritesView(Gtk.Box):
         while self.wallpapers_grid.get_first_child():
             self.wallpapers_grid.remove(self.wallpapers_grid.get_first_child())
 
+        # Clear card->wallpaper mapping
+        self.card_wallpaper_map.clear()
+
         # Add new cards
         for favorite in self.view_model.favorites:
             card = self._create_wallpaper_card(favorite)
@@ -173,10 +333,23 @@ class FavoritesView(Gtk.Box):
         card.set_size_request(220, 200)
         card.add_css_class("wallpaper-card")
 
-        # Add double-click gesture (same as LocalView)
+        # Make card focusable
+        card.set_can_focus(True)
+        card.set_focusable(True)
+
+        # Store mapping for keyboard activation
+        self.card_wallpaper_map[card] = favorite.wallpaper
+
+        wallpaper = favorite.wallpaper
+        is_selected = wallpaper in self.view_model.get_selected_wallpapers()
+        if is_selected:
+            card.add_css_class("selected")
+        if self.view_model.selection_mode:
+            card.add_css_class("selection-mode")
+
         gesture = Gtk.GestureClick()
-        gesture.set_button(1)  # Left button only
-        gesture.connect("pressed", self._on_card_double_clicked, favorite)
+        gesture.set_button(1)
+        gesture.connect("pressed", self._on_card_clicked, favorite, card)
         card.add_controller(gesture)
 
         image = Gtk.Picture()
@@ -184,17 +357,34 @@ class FavoritesView(Gtk.Box):
         image.set_content_fit(Gtk.ContentFit.CONTAIN)
         image.add_css_class("wallpaper-thumb")
         image.set_tooltip_text(
-            Path(favorite.wallpaper.path).name if hasattr(favorite, "wallpaper") else "Favorite"
+            Path(wallpaper.path).name if hasattr(wallpaper, "path") else "Favorite"
         )
 
         def on_thumbnail_loaded(texture):
             if texture:
                 image.set_paintable(texture)
 
-        self.view_model.load_thumbnail_async(str(favorite.wallpaper.path), on_thumbnail_loaded)
+        self.view_model.load_thumbnail_async(str(wallpaper.path), on_thumbnail_loaded)
 
         overlay = Gtk.Overlay()
         overlay.set_child(image)
+
+        checkbox = Gtk.CheckButton()
+        checkbox.add_css_class("selection-checkbox")
+        checkbox.set_halign(Gtk.Align.START)
+        checkbox.set_valign(Gtk.Align.START)
+        checkbox.set_margin_start(8)
+        checkbox.set_margin_top(8)
+        checkbox.set_active(is_selected)
+        if self.view_model.selection_mode:
+            checkbox.set_visible(True)
+        else:
+            checkbox.set_visible(False)
+        checkbox.connect(
+            "toggled", lambda cb: self._on_selection_toggled(wallpaper, cb.get_active())
+        )
+        overlay.add_overlay(checkbox)
+
         card.append(overlay)
 
         actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -214,13 +404,22 @@ class FavoritesView(Gtk.Box):
         card.append(actions_box)
         return card
 
+    def _on_card_clicked(self, gesture, n_press, x, y, favorite, card):
+        if self.view_model.selection_mode and n_press == 1:
+            wallpaper = favorite.wallpaper
+            self.view_model.toggle_selection(wallpaper)
+            self.update_wallpapers_grid()
+        elif n_press == 2:
+            self._on_set_wallpaper(None, favorite)
+            if self.view_model.selection_mode:
+                self.update_wallpapers_grid()
+
+    def _on_selection_toggled(self, wallpaper, is_selected):
+        self.view_model.toggle_selection(wallpaper)
+
     def _on_set_wallpaper(self, button, favorite):
         """Handle set wallpaper button click"""
         self.view_model.set_wallpaper(favorite)
-
-    def _on_card_double_clicked(self, gesture, n_press, x, y, favorite):
-        if n_press >= 2:  # Only trigger on double-click
-            self._on_set_wallpaper(None, favorite)
 
     def _on_remove_favorite(self, button, favorite):
         """Handle remove button click"""

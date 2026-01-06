@@ -11,14 +11,22 @@ class BaseViewModel(GObject.Object):
 
     __gtype_name__ = "BaseViewModel"
 
+    __gsignals__ = {
+        "wallpaper-set": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+    }
+
     is_busy = GObject.Property(type=bool, default=False)
     error_message = GObject.Property(type=str, default=None)
+    selection_mode = GObject.Property(type=bool, default=False)
+    selected_count = GObject.Property(type=int, default=0)
+    selected_wallpapers = GObject.Property(type=object)
 
     def __init__(self) -> None:
         super().__init__()
         self._is_busy = False
         self._error_message: str | None = None
         self._executor = ThreadPoolExecutor(max_workers=4)
+        self._selected_wallpapers_list = []
 
     def bind_property(
         self,
@@ -75,9 +83,7 @@ class BaseViewModel(GObject.Object):
 
                     # Scale the pixbuf
                     if pixbuf:
-                        pixbuf = pixbuf.scale_simple(
-                            220, 160, GdkPixbuf.InterpType.BILINEAR
-                        )
+                        pixbuf = pixbuf.scale_simple(220, 160, GdkPixbuf.InterpType.BILINEAR)
                 else:
                     # Local file
                     pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
@@ -99,7 +105,36 @@ class BaseViewModel(GObject.Object):
         """Clear error message"""
         self.error_message = None
 
+    def toggle_selection(self, wallpaper) -> None:
+        if wallpaper in self._selected_wallpapers_list:
+            self._selected_wallpapers_list.remove(wallpaper)
+        else:
+            self._selected_wallpapers_list.append(wallpaper)
+        self._update_selection_state()
+
+    def select_all(self) -> None:
+        if hasattr(self, "wallpapers") or hasattr(self, "favorites"):
+            wallpapers_list = getattr(self, "wallpapers", getattr(self, "favorites", []))
+            self._selected_wallpapers_list = list(wallpapers_list)
+            self._update_selection_state()
+
+    def deselect_all(self) -> None:
+        self._selected_wallpapers_list = []
+        self._update_selection_state()
+
+    def clear_selection(self) -> None:
+        self.deselect_all()
+        self.selection_mode = False
+
+    def get_selected_wallpapers(self) -> list:
+        return self._selected_wallpapers_list.copy()
+
+    def _update_selection_state(self) -> None:
+        self.selected_wallpapers = self._selected_wallpapers_list
+        self.selected_count = len(self._selected_wallpapers_list)
+        if self.selected_count > 0:
+            self.selection_mode = True
+
     def __del__(self) -> None:
-        """Cleanup executor on deletion."""
         if hasattr(self, "_executor"):
             self._executor.shutdown(wait=False)

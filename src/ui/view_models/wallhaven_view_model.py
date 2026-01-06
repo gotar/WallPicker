@@ -193,10 +193,11 @@ class WallhavenViewModel(BaseViewModel):
 
     async def load_prev_page(self) -> None:
         """Load previous page of wallpapers"""
-        if self.current_page > 1:
+        target_page = self.current_page - 1
+        if target_page >= 1:
             await self.search_wallpapers(
                 query=self.search_query,
-                page=self.current_page - 1,
+                page=target_page,
                 category=self.category,
                 purity=self.purity,
                 sorting=self.sorting,

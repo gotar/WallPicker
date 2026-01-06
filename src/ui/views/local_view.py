@@ -91,6 +91,7 @@ class LocalView(Adw.BreakpointBin):
     def _create_status_bar(self):
         status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         status_box.add_css_class("status-bar")
+        status_box.set_halign(Gtk.Align.CENTER)
         self.status_label = Gtk.Label(label="")
         status_box.append(self.status_label)
         self.main_box.append(status_box)

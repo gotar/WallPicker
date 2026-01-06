@@ -7,80 +7,31 @@
     --spacing-lg: 16px;
     --spacing-xl: 24px;
     --spacing-2xl: 32px;
-    
-    /* Card colors (system-aware) */
-    --card-bg-color: alpha(@window_fg_color, 0.03);
-    --card-hover-bg: alpha(@window_fg_color, 0.05);
-    --card-border-color: alpha(@window_fg_color, 0.1);
-    
-    /* Shadows */
-    --card-shadow: 0 2px 8px alpha(@window_fg_color, 0.15);
-    --card-shadow-hover: 0 8px 16px alpha(@window_fg_color, 0.25);
-    
-    /* Transitions */
-    --transition-fast: 150ms ease-out;
-    --transition-normal: 300ms ease-out;
-    --transition-slow: 500ms ease-out;
-    --transition-bounce: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* Wallpaper Cards */
+/* Wallpaper Cards - v1.1.1 Style */
 .wallpaper-card {
-    background-color: var(--card-bg-color);
     border-radius: 12px;
-    border: 1px solid var(--card-border-color);
-    padding: var(--spacing-sm);
-    margin: var(--spacing-sm);
-    box-shadow: var(--card-shadow);
-    transition: transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1.0),
-                box-shadow 0.2s cubic-bezier(0.4, 0.0, 0.2, 1.0),
-                border-color 0.2s ease,
-                background-color 0.2s ease;
-    will-change: transform, opacity;
-    transform: translateZ(0);
-    contain: layout style;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background-color: rgba(0, 0, 0, 0.03);
+    padding: 8px;
+    margin: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .wallpaper-card:hover {
-    transform: translateY(-3px) scale(1.02);
-    box-shadow: var(--card-shadow-hover);
-    background-color: var(--card-hover-bg);
-    border-color: alpha(@window_fg_color, 0.15);
-}
-
-.wallpaper-card:active {
-    transform: translateY(0) scale(0.98);
-    box-shadow: var(--card-shadow);
-    transition-duration: 100ms;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    border-color: rgba(0, 0, 0, 0.25);
 }
 
 .wallpaper-card.selected {
     border: 2px solid @accent_bg_color;
     box-shadow: 0 0 0 4px @accent_color;
-    animation: selection-pulse 2s ease-in-out;
 }
 
 .wallpaper-card.current-wallpaper {
-    border: 3px solid @success_color;
-    position: relative;
-}
-
-.wallpaper-card.current-wallpaper::before {
-    content: "";
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 24px;
-    height: 24px;
-    background: @success_color;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 14px;
-    animation: current-badge-pulse 2s ease-in-out infinite;
+    border: 3px solid #4caf50;
 }
 
 .wallpaper-card.current-wallpaper::after {
@@ -90,37 +41,7 @@
     right: -8px;
     width: 24px;
     height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 14px;
-}
-
-@keyframes current-badge-pulse {
-    0%, 100% {
-        box-shadow: 0 0 0 alpha(@success_color, 0.7);
-    }
-    50% {
-        box-shadow: 0 0 0 6px alpha(@success_color, 0);
-    }
-}
-
-/* Current Wallpaper Indicator (subtle visual cue) */
-.wallpaper-card.current-wallpaper {
-    border: 3px solid @success_color;
-    position: relative;
-}
-
-.wallpaper-card.current-wallpaper::before {
-    content: "";
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 24px;
-    height: 24px;
-    background: @success_color;
+    background: #4caf50;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -128,46 +49,6 @@
     color: white;
     font-weight: bold;
     font-size: 14px;
-    animation: current-badge-pulse 2s ease-in-out infinite;
-}
-
-.wallpaper-card.current-wallpaper::after {
-    content: "✓";
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 14px;
-}
-
-@keyframes current-badge-pulse {
-    0%, 100% {
-        box-shadow: 0 0 0 0 alpha(@success_color, 0.7);
-    }
-    50% {
-        box-shadow: 0 0 0 6px alpha(@success_color, 0);
-    }
-}
-
-@keyframes selection-pulse {
-    0% {
-        border-color: @accent_bg_color;
-        box-shadow: 0 0 0 0 @accent_color;
-    }
-    50% {
-        border-color: @accent_bg_color;
-        box-shadow: 0 0 0 6px @accent_color;
-    }
-    100% {
-        border-color: @accent_bg_color;
-        box-shadow: 0 0 0 0 @accent_color;
-    }
 }
 
 /* Selection Checkbox */
@@ -199,49 +80,33 @@
 .wallpaper-card:focus:focus-visible {
     outline: 3px solid @accent_bg_color;
     outline-offset: 3px;
-    transition: outline-color 0.2s ease, outline-width 0.2s ease;
-    animation: focus-pulse 0.5s ease;
-}
-
-@keyframes focus-pulse {
-    0% {
-        outline-color: @accent_bg_color;
-    }
-    50% {
-        outline-color: alpha(@accent_bg_color, 0.5);
-    }
-    100% {
-        outline-color: @accent_bg_color;
-    }
 }
 
 *:focus:focus-visible {
     outline: 3px solid @accent_bg_color;
     outline-offset: 3px;
-    transition: outline-color 0.2s ease, outline-width 0.2s ease;
-    animation: focus-pulse 0.5s ease;
 }
 
 .wallpaper-thumb {
-    object-fit: cover;
+    object-fit: fill;
     max-width: 180px;
     max-height: 180px;
     border-radius: 8px;
 }
 
-/* Action Buttons */
+/* Action Buttons - v1.1.1 Style */
 .action-button {
     min-width: 80px;
     padding: 6px 12px;
     border-radius: 6px;
     font-size: 12px;
-    background: alpha(@window_fg_color, 0.1);
-    color: @window_fg_color;
-    transition: background var(--transition-fast);
+    background: rgba(0, 0, 0, 0.1);
+    color: white;
+    transition: background 0.15s;
 }
 
 .action-button:hover {
-    background: alpha(@window_fg_color, 0.2);
+    background: rgba(0, 0, 0, 0.2);
 }
 
 .action-button.suggested-action {
@@ -254,34 +119,32 @@
 }
 
 .destructive-action {
-    background: @destructive_bg_color;
-    color: @destructive_fg_color;
+    background: #e51a4a;
+    color: white;
 }
 
 .destructive-action:hover {
-    background: shade(@destructive_bg_color, 0.9);
+    background: #c0392b;
 }
 
-/* Error Display */
+/* Error Display - v1.1.1 Style */
 .error {
-    color: @error_color;
+    color: #e51a4a;
     font-size: 12px;
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: 8px 12px;
     border-radius: 6px;
-    background: alpha(@error_color, 0.1);
-    margin: var(--spacing-md);
+    background: rgba(249, 46, 46, 0.1);
+    margin: 12px;
 }
 
-/* Filter Bar */
+/* Filter Bar - v1.1.1 Style */
 .filter-bar {
-    padding: var(--spacing-md);
-    background: @headerbar_bg_color;
-    border-bottom: 1px solid alpha(@window_fg_color, 0.08);
+    padding: 12px;
 }
 
 /* Search Filter Bar */
 .search-filter-bar {
-    padding: var(--spacing-md) var(--spacing-lg);
+    padding: 12px 16px;
     background: alpha(@window_bg_color, 0.8);
     border-bottom: 1px solid alpha(@window_fg_color, 0.08);
 }
@@ -299,7 +162,7 @@
 
 /* Filter Chips */
 .filter-chips {
-    padding: var(--spacing-sm) var(--spacing-lg);
+    padding: 8px 16px;
     background: alpha(@window_bg_color, 0.9);
     border-bottom: 1px solid alpha(@window_fg_color, 0.06);
 }
@@ -310,24 +173,10 @@
     border-radius: 18px;
     padding: 4px 12px;
     transition: all 0.2s ease;
-    animation: chip-appear 0.3s ease-out;
-    will-change: transform, opacity;
-    transform: translateZ(0);
 }
 
 .filter-chip.chip-removing {
     animation: chip-remove 0.2s ease-in forwards;
-}
-
-@keyframes chip-appear {
-    from {
-        transform: scale(0.8);
-        opacity: 0;
-    }
-    to {
-        transform: scale(1.0);
-        opacity: 1;
-    }
 }
 
 @keyframes chip-remove {
@@ -378,11 +227,11 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: @dim_label_color;
-    margin-bottom: var(--spacing-sm);
+    margin-bottom: 8px;
 }
 
 .filter-panel Gtk.CheckButton {
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: 8px 12px;
     border-radius: 6px;
 }
 
@@ -391,7 +240,7 @@
 }
 
 .filter-panel Gtk.DropDown {
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 12px;
     border-radius: 8px;
     min-height: 36px;
 }
@@ -417,28 +266,23 @@
     }
 }
 
-/* Status Bar */
+/* Status Bar - v1.1.1 Style */
 .status-bar {
     font-size: 12px;
     font-weight: 600;
-    color: @dim_label_color;
-    padding: var(--spacing-sm) var(--spacing-md);
+    color: rgba(255, 255, 255, 0.7);
+    padding: 8px 12px;
     background-color: @headerbar_bg_color;
     border-top: 1px solid alpha(@window_fg_color, 0.08);
 }
 
 /* Status Page Styles */
 .status-page.compact {
-    padding: var(--spacing-xl);
+    padding: 24px;
 }
 
 .status-page image {
     color: @dim_label_color;
-    transition: transform 0.3s ease;
-}
-
-.status-page:hover image {
-    transform: scale(1.05);
 }
 
 /* Responsive Grid Adjustments */
@@ -447,7 +291,7 @@
         max-width: 100%;
         max-height: 140px;
     }
-    
+
     .action-button {
         min-width: 60px;
         font-size: 11px;
@@ -457,7 +301,11 @@
 
 /* Dark mode enhancements */
 .dark .wallpaper-card {
-    background-color: alpha(@window_fg_color, 0.05);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.dark .wallpaper-card:hover {
+    background-color: rgba(255, 255, 255, 0.08);
 }
 
 /* ViewSwitcherBar auto-hide on wide screens */
@@ -479,7 +327,7 @@
     .wallpaper-card {
         width: 100%;
         min-width: unset;
-        padding: var(--spacing-sm);
+        padding: 8px;
     }
 
     .wallpaper-thumb {
@@ -548,28 +396,13 @@
 
     .filter-bar.vertical > * {
         width: 100%;
-        margin-bottom: var(--spacing-sm);
+        margin-bottom: 8px;
     }
 
     .filter-bar.vertical Gtk.Entry,
     .filter-bar.vertical Gtk.SearchEntry {
         width: 100%;
     }
-}
-
-.dark .wallpaper-card:hover {
-    background-color: alpha(@window_fg_color, 0.08);
-}
-
-/* Animation for current wallpaper indicator */
-@keyframes pulse-border {
-    0% { box-shadow: 0 0 0 0 @accent_bg_color; }
-    70% { box-shadow: 0 0 0 6px alpha(@accent_bg_color, 0); }
-    100% { box-shadow: 0 0 0 0 alpha(@accent_bg_color, 0); }
-}
-
-.wallpaper-card.current {
-    animation: pulse-border 2s ease-in-out;
 }
 
 /* Banner Styles */
@@ -587,7 +420,6 @@
     max-height: 100px;
     opacity: 1;
     transform: translateY(0);
-    will-change: transform, opacity;
 }
 
 .banner.warning-banner {
@@ -653,7 +485,6 @@
 .preview-dialog {
     min-width: 800px;
     min-height: 600px;
-    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .preview-image-container {
@@ -663,22 +494,20 @@
 
 .preview-image {
     border-radius: 8px;
-    transition: transform 0.3s ease;
 }
 
 .preview-image.loading {
     opacity: 0.5;
-    transform: scale(0.95);
 }
 
 .preview-sidebar {
     min-width: 300px;
     max-width: 400px;
-    padding: var(--spacing-lg);
+    padding: 24px;
 }
 
 .preview-sidebar Adw.PreferencesGroup {
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 12px;
 }
 
 /* Large pill buttons */
@@ -694,11 +523,11 @@
     .preview-dialog {
         presentation-mode: bottom-sheet;
     }
-    
+
     .preview-image-container {
-        padding: var(--spacing-md);
+        padding: 12px;
     }
-    
+
     .preview-sidebar {
         min-width: 100%;
         max-width: 100%;
@@ -715,28 +544,23 @@
     padding: 4px;
     margin-right: 8px;
     border-radius: 8px;
-    background: alpha(@card_bg_color, 0.5);
-    border: 1px solid alpha(@window_fg_color, 0.1);
+    background: rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(0, 0, 0, 0.15);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: all 0.2s;
 }
 
 .current-wallpaper-thumbnail:hover {
-    background: alpha(@window_fg_color, 0.08);
-    border-color: alpha(@window_fg_color, 0.2);
-    transform: scale(1.05);
+    background: rgba(0, 0, 0, 0.15);
+    border-color: rgba(0, 0, 0, 0.25);
 }
 
 .current-thumb {
     border-radius: 6px;
-    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275),
-                opacity 0.4s ease;
-    will-change: transform, opacity;
-    transform: translateZ(0);
 }
 
 .current-thumb.thumbnail-updated {
-    animation: thumbnail-pop 0.5s ease-out;
+    animation: thumbnail-pop 0.3s ease-out;
 }
 
 @keyframes thumbnail-pop {
@@ -745,8 +569,8 @@
         opacity: 1;
     }
     50% {
-        transform: scale(1.3) rotate(10deg);
-        opacity: 0.5;
+        transform: scale(1.1);
+        opacity: 0.8;
     }
     100% {
         transform: scale(1.0);
@@ -764,25 +588,17 @@
     min-height: 44px;
     min-width: 88px;
     padding: 12px 16px;
-    transition: background var(--transition-fast), transform 0.1s ease;
+    transition: background 0.15s;
 }
 
 .fav-btn {
     min-width: 44px;
     min-height: 44px;
-    transition: transform 0.1s ease;
 }
 
 .wallpaper-thumb {
     min-width: 200px;
     min-height: 200px;
-}
-
-/* Active touch states for cards */
-.wallpaper-card:active {
-    transform: scale(0.97);
-    opacity: 0.8;
-    transition: transform 0.1s ease, opacity 0.1s ease;
 }
 
 /* Touch feedback for buttons */
@@ -844,10 +660,6 @@ clamp {
     halign: center;
 }
 
-/* Clamp automatically centers content and handles width constraints
- * No additional CSS needed for the tightening effect - it's native
- * to Adw.Clamp behavior */
-
 .loading-spinner {
     opacity: 0.7;
     animation: spin 1s linear infinite;
@@ -877,7 +689,6 @@ clamp {
 .current-thumb,
 .filter-chip,
 .banner {
-    will-change: transform, opacity;
     transform: translateZ(0);
 }
 
@@ -910,17 +721,6 @@ viewstack {
 
 toast {
     transition-duration: 300ms;
-}
-
-@keyframes toast-slide-up {
-    from {
-        transform: translateY(20px);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
 }
 
 /* ============================================================================
@@ -966,17 +766,6 @@ Gtk.CheckButton:focus-visible {
     outline: 3px solid @accent_bg_color;
     outline-offset: 2px;
     border-radius: 4px;
-}
-
-/* Focus ring animation for visual feedback */
-@keyframes focus-ring-pulse {
-    0% { outline-color: @accent_bg_color; }
-    50% { outline-color: alpha(@accent_bg_color, 0.6); }
-    100% { outline-color: @accent_bg_color; }
-}
-
-*:focus-visible {
-    animation: focus-ring-pulse 1.5s ease-in-out;
 }
 
 /* ============================================================================
@@ -1031,7 +820,7 @@ Gtk.CheckButton:focus-visible {
 }
 
 .high-contrast .error {
-    border: 2px solid @error_color;
+    border: 2px solid #e51a4a;
 }
 
 .high-contrast .preview-image-container {
@@ -1090,8 +879,8 @@ Gtk.CheckButton:focus-visible {
 
 /* Use relative units that respect system font size */
 .wallpaper-card .filename-label {
-    font-size: 0.875rem;  /* Relative to system font */
-    min-height: 1.4rem;  /* Ensure minimum touch target size */
+    font-size: 0.875rem;
+    min-height: 1.4rem;
 }
 
 .wallpaper-thumb {
@@ -1102,7 +891,7 @@ Gtk.CheckButton:focus-visible {
 body,
 window,
 application {
-    font-size: 1rem;  /* Respects system font size setting */
+    font-size: 1rem;
 }
 
 .caption,
@@ -1129,16 +918,16 @@ application {
 
 /* Ensure text has sufficient contrast (WCAG AA: 4.5:1) */
 .error {
-    color: @error_color;
-    background: alpha(@error_color, 0.15);
+    color: #e51a4a;
+    background: rgba(249, 46, 46, 0.15);
     font-weight: 600;
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: 8px 12px;
     border-radius: 6px;
-    margin: var(--spacing-md);
+    margin: 12px;
 }
 
 .dim-label {
-    opacity: 0.7;  /* At least 70% opacity for readability */
+    opacity: 0.7;
     color: @window_fg_color;
 }
 
@@ -1147,7 +936,7 @@ button,
 .action-button,
 Gtk.Button {
     cursor: pointer;
-    min-height: 44px;  /* Touch-friendly minimum size */
+    min-height: 44px;
     min-width: 44px;
 }
 

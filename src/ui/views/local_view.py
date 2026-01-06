@@ -36,6 +36,7 @@ class LocalView(Adw.BreakpointBin):
 
         self._create_toolbar()
         self._create_wallpaper_grid()
+        self._create_status_bar()
 
     def _create_toolbar(self):
         """Create toolbar with actions"""
@@ -44,11 +45,6 @@ class LocalView(Adw.BreakpointBin):
             spacing=12,
         )
         self.toolbar.add_css_class("filter-bar")
-
-        # Refresh button
-        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh")
-        refresh_btn.connect("clicked", self._on_refresh_clicked)
-        self.toolbar.append(refresh_btn)
 
         # Folder button
         folder_btn = Gtk.Button(icon_name="folder-symbolic", tooltip_text="Choose folder")
@@ -64,10 +60,6 @@ class LocalView(Adw.BreakpointBin):
         spacer.set_hexpand(True)
         self.toolbar.append(spacer)
 
-        # Status label
-        self.status_label = Gtk.Label(label="")
-        self.toolbar.append(self.status_label)
-
         # Error label
         self.error_label = Gtk.Label(wrap=True)
         self.error_label.add_css_class("error")
@@ -77,8 +69,7 @@ class LocalView(Adw.BreakpointBin):
         self.main_box.append(self.toolbar)
 
     def update_status(self, count: int):
-        """Update status label with wallpaper count"""
-        self.status_label.set_label(f"{count} wallpapers")
+        self.status_label.set_text(f"{count} wallpapers")
 
     def _create_wallpaper_grid(self):
         """Create wallpaper grid display"""
@@ -96,6 +87,13 @@ class LocalView(Adw.BreakpointBin):
         self.scroll.set_child(self.wallpaper_grid)
 
         self.main_box.append(self.scroll)
+
+    def _create_status_bar(self):
+        status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        status_box.add_css_class("status-bar")
+        self.status_label = Gtk.Label(label="")
+        status_box.append(self.status_label)
+        self.main_box.append(status_box)
 
     def _bind_to_view_model(self):
         GObject.Object.bind_property(
@@ -264,9 +262,6 @@ class LocalView(Adw.BreakpointBin):
             self.view_model.wallpaper_setter.set_wallpaper(str(wallpaper.path))
             break
         self.view_model.clear_selection()
-
-    def _on_refresh_clicked(self, button):
-        self.view_model.refresh_wallpapers()
 
     def _on_folder_clicked(self, button):
         window = self.get_root()

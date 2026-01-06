@@ -119,22 +119,6 @@ class WallhavenView(Adw.Bin):
         self.error_label.set_visible(False)
         filter_box.append(self.error_label)
 
-        # Spacer
-        spacer = Gtk.Label()
-        spacer.set_hexpand(True)
-        filter_box.append(spacer)
-
-        # Pagination buttons
-        self.prev_btn = Gtk.Button(icon_name="go-previous-symbolic", tooltip_text="Previous page")
-        self.prev_btn.set_sensitive(False)
-        self.prev_btn.connect("clicked", self._on_prev_page_clicked)
-        filter_box.append(self.prev_btn)
-
-        self.next_btn = Gtk.Button(icon_name="go-next-symbolic", tooltip_text="Next page")
-        self.next_btn.set_sensitive(False)
-        self.next_btn.connect("clicked", self._on_next_page_clicked)
-        filter_box.append(self.next_btn)
-
         self.main_box.append(filter_box)
 
     def _create_wallpaper_grid(self):
@@ -155,12 +139,22 @@ class WallhavenView(Adw.Bin):
         self.main_box.append(self.scroll)
 
     def _create_pagination_controls(self):
-        """Create pagination status display"""
         status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         status_box.add_css_class("status-bar")
+        status_box.set_halign(Gtk.Align.CENTER)
 
-        self.page_label = Gtk.Label(label="Page 1")
+        self.prev_btn = Gtk.Button(icon_name="go-previous-symbolic", tooltip_text="Previous page")
+        self.prev_btn.set_sensitive(False)
+        self.prev_btn.connect("clicked", self._on_prev_page_clicked)
+        status_box.append(self.prev_btn)
+
+        self.page_label = Gtk.Label(label="Page 1 / 1 - 0 wallpapers")
         status_box.append(self.page_label)
+
+        self.next_btn = Gtk.Button(icon_name="go-next-symbolic", tooltip_text="Next page")
+        self.next_btn.set_sensitive(False)
+        self.next_btn.connect("clicked", self._on_next_page_clicked)
+        status_box.append(self.next_btn)
 
         self.main_box.append(status_box)
 
@@ -581,7 +575,9 @@ class WallhavenView(Adw.Bin):
         return sortings[active]
 
     def update_pagination(self, current_page: int, total_pages: int):
-        """Update pagination controls"""
-        self.page_label.set_text(f"Page {current_page}")
+        wallpaper_count = len(self.view_model.wallpapers)
+        self.page_label.set_text(
+            f"Page {current_page} / {total_pages} - {wallpaper_count} wallpapers"
+        )
         self.prev_btn.set_sensitive(current_page > 1)
         self.next_btn.set_sensitive(current_page < total_pages)

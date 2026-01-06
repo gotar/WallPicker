@@ -423,6 +423,8 @@
     font-weight: 600;
     color: @dim_label_color;
     padding: var(--spacing-sm) var(--spacing-md);
+    background-color: @headerbar_bg_color;
+    border-top: 1px solid alpha(@window_fg_color, 0.08);
 }
 
 /* Status Page Styles */

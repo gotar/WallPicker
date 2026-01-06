@@ -49,28 +49,19 @@ class FavoritesView(Adw.Bin):
         self._create_status_bar()
 
     def _create_toolbar(self):
-        """Create toolbar with actions"""
         self.toolbar = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=12,
         )
         self.toolbar.add_css_class("filter-bar")
 
-        # Refresh button
-        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh")
-        refresh_btn.connect("clicked", self._on_refresh_clicked)
-        self.toolbar.append(refresh_btn)
-
-        # Loading spinner
         self.loading_spinner = Gtk.Spinner(spinning=False)
         self.toolbar.append(self.loading_spinner)
 
-        # Spacer
         spacer = Gtk.Label()
         spacer.set_hexpand(True)
         self.toolbar.append(spacer)
 
-        # Search entry
         self.search_entry = Gtk.SearchEntry(placeholder_text="Search favorites...")
         self.search_entry.connect("search-changed", self._on_search_changed)
         self.toolbar.append(self.search_entry)
@@ -95,9 +86,11 @@ class FavoritesView(Adw.Bin):
         self.main_box.append(self.scroll)
 
     def _create_status_bar(self):
-        """Create status bar"""
+        status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        status_box.add_css_class("status-bar")
         self.status_label = Gtk.Label(label="")
-        self.main_box.append(self.status_label)
+        status_box.append(self.status_label)
+        self.main_box.append(status_box)
 
     def _bind_to_view_model(self):
         """Bind to ViewModel state changes"""
@@ -268,10 +261,6 @@ class FavoritesView(Adw.Bin):
             self.view_model.set_wallpaper(favorite)
             break
         self.view_model.clear_selection()
-
-    def _on_refresh_clicked(self, button):
-        """Handle refresh button click"""
-        self.view_model.load_favorites()
 
     def _on_search_changed(self, entry):
         """Handle search entry changes"""

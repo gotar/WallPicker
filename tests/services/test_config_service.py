@@ -148,3 +148,56 @@ def test_legacy_save_method(config_service: ConfigService, temp_dir: Path):
 
     assert saved["local_wallpapers_dir"] == str(legacy_dir)
     assert saved["wallhaven_api_key"] == "legacy-key"
+
+
+def test_set_pictures_dir(config_service: ConfigService, temp_dir: Path):
+    """Test set_pictures_dir method."""
+    # Create directory first
+    pictures_dir = temp_dir / "pictures"
+    pictures_dir.mkdir(parents=True, exist_ok=True)
+
+    config_service.set_pictures_dir(pictures_dir)
+
+    config = config_service.get_config()
+    assert config.local_wallpapers_dir == pictures_dir
+
+
+def test_load_config_with_json_decode_error(config_service: ConfigService):
+    """Test loading config with invalid JSON raises ServiceError."""
+    # Write invalid JSON
+    with open(config_service.config_file, "w") as f:
+        f.write("invalid json {")
+
+    with pytest.raises(ServiceError, match="Failed to load configuration"):
+        config_service.load_config()
+
+
+def test_save_config_creates_directory(config_service: ConfigService, temp_dir: Path):
+    """Test saving config creates parent directories."""
+    # Use a nested path that doesn't exist
+    nested_path = temp_dir / "nested" / "deep" / "dir"
+    config = Config(
+        local_wallpapers_dir=nested_path,
+        wallhaven_api_key="test",
+    )
+
+    # Create the nested directory first for config validation
+    nested_path.mkdir(parents=True)
+
+    config_service.save_config(config)
+
+    # Parent directory should exist
+    assert config_service.config_dir.exists()
+
+
+def test_get_config_caches_result(config_service: ConfigService, temp_dir: Path):
+    """Test get_config caches the config object."""
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    config_service.load_config()
+
+    # Second call should return cached object
+    config1 = config_service.get_config()
+    config2 = config_service.get_config()
+
+    assert config1 is config2

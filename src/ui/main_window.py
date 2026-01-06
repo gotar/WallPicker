@@ -179,6 +179,16 @@ class WallPickerWindow(Adw.ApplicationWindow):
         self.stack.set_hexpand(True)
         self.stack.set_vexpand(True)
 
+        # Wrap ViewStack in Adw.Clamp for optimal width constraint
+        # Clamp constrains content to 1400px max width with tightening at 1000px
+        clamp = Adw.Clamp()
+        clamp.set_maximum_size(1400)  # Max width: 1400px
+        clamp.set_tightening_threshold(1000)  # Start tightening at 1000px
+        clamp.set_child(self.stack)  # Wrap ViewStack
+
+        # Set clamp as toolbar content
+        self.toolbar_view.set_content(clamp)
+
         # Create views
         self.local_view = LocalView(self.local_view_model, self.banner_service)
         local_page = self.stack.add_titled(self.local_view, "local", "Local")
@@ -192,19 +202,11 @@ class WallPickerWindow(Adw.ApplicationWindow):
         favorites_page = self.stack.add_titled(self.favorites_view, "favorites", "Favorites")
         favorites_page.set_icon_name("starred-symbolic")
 
+        # Add view switcher bar at bottom
         self.view_switcher_bar = Adw.ViewSwitcherBar()
         self.view_switcher_bar.set_stack(self.stack)
+        self.view_switcher_bar.set_reveal(True)
         self.toolbar_view.add_bottom_bar(self.view_switcher_bar)
-
-        # Wrap ViewStack in Adw.Clamp for optimal width constraint
-        # Clamp constrains content to 1400px max width with tightening at 1000px
-        clamp = Adw.Clamp()
-        clamp.set_maximum_size(1400)  # Max width: 1400px
-        clamp.set_tightening_threshold(1000)  # Start tightening at 1000px
-        clamp.set_child(self.stack)  # Wrap ViewStack
-
-        # Set clamp as toolbar content
-        self.toolbar_view.set_content(clamp)
 
         # Add banner widget between content and bottom bar
         # Position: below Clamp, above ViewSwitcherBar

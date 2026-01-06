@@ -286,7 +286,7 @@ class FavoritesView(Adw.Bin):
         # Error handling can be added here if needed
 
     def update_wallpapers_grid(self):
-        """Update the wallpapers grid display"""
+        """Update wallpapers grid display"""
         # Clear existing cards
         while self.wallpapers_grid.get_first_child():
             self.wallpapers_grid.remove(self.wallpapers_grid.get_first_child())
@@ -295,7 +295,7 @@ class FavoritesView(Adw.Bin):
         self.card_wallpaper_map.clear()
 
         # Add new cards
-        for favorite in favorites:
+        for favorite in self.view_model.favorites:
             card = self._create_wallpaper_card(favorite)
             self.wallpapers_grid.append(card)
 

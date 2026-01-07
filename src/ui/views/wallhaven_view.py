@@ -81,7 +81,7 @@ class WallhavenView(Adw.Bin):
         self.wallpaper_grid = Gtk.FlowBox()
         self.wallpaper_grid.set_homogeneous(True)
         self.wallpaper_grid.set_min_children_per_line(2)
-        self.wallpaper_grid.set_max_children_per_line(6)
+        self.wallpaper_grid.set_max_children_per_line(12)
         self.wallpaper_grid.set_column_spacing(12)
         self.wallpaper_grid.set_row_spacing(12)
         self.wallpaper_grid.set_selection_mode(Gtk.SelectionMode.NONE)

@@ -1,13 +1,12 @@
 import subprocess
+import time
 from pathlib import Path
 
 
 class WallpaperSetter:
     def __init__(self):
         self.cache_dir = Path.home() / ".cache" / "wallpaper"
-        self.symlink_path = (
-            Path.home() / ".config" / "omarchy" / "current" / "background"
-        )
+        self.symlink_path = Path.home() / ".config" / "omarchy" / "current" / "background"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.symlink_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -33,8 +32,6 @@ class WallpaperSetter:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            import time
-
             time.sleep(1)
 
     def _update_symlink(self, path: Path):

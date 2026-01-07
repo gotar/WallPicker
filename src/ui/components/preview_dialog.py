@@ -1,5 +1,6 @@
 """Modern Preview Dialog component for wallpaper inspection."""
 
+import sys
 import threading
 from pathlib import Path
 
@@ -11,6 +12,10 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 
 from gi.repository import Adw, Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from core.asyncio_integration import schedule_async  # noqa: E402
 
 
 class PreviewDialog(Adw.Dialog):
@@ -150,9 +155,7 @@ class PreviewDialog(Adw.Dialog):
         # Resolution row
         resolution_row = Adw.ActionRow()
         resolution_row.set_title("Resolution")
-        resolution = (
-            f"{self.wallpaper.resolution.width}×{self.wallpaper.resolution.height}"
-        )
+        resolution = f"{self.wallpaper.resolution.width}×{self.wallpaper.resolution.height}"
         resolution_row.set_subtitle(resolution)
         resolution_row.add_suffix(Gtk.Image(icon_name="display-symbolic"))
         metadata_group.add(resolution_row)
@@ -240,9 +243,7 @@ class PreviewDialog(Adw.Dialog):
             self.delete_btn.set_hexpand(True)
             self.delete_btn.set_size_request(-1, 42)
             self.delete_btn.set_icon_name("user-trash-symbolic")
-            self.delete_btn.set_visible(
-                self.wallpaper.source.value in ("local", "favorite")
-            )
+            self.delete_btn.set_visible(self.wallpaper.source.value in ("local", "favorite"))
             self.delete_btn.connect("clicked", self._on_delete)
             actions_group.add(self.delete_btn)
 
@@ -299,9 +300,7 @@ class PreviewDialog(Adw.Dialog):
             "local": "folder-symbolic",
             "favorite": "starred-symbolic",
         }
-        icon_name = icon_map.get(
-            self.wallpaper.source.value, "image-x-generic-symbolic"
-        )
+        icon_name = icon_map.get(self.wallpaper.source.value, "image-x-generic-symbolic")
         return Gtk.Image(icon_name=icon_name)
 
     def _update_favorite_button(self):
@@ -333,35 +332,28 @@ class PreviewDialog(Adw.Dialog):
             try:
                 if self.thumbnail_cache and self.wallpaper.source.value == "wallhaven":
                     # Use thumbnail cache for remote images
-                    import asyncio
+                    cached = self.thumbnail_cache.get_thumbnail(image_source)
+                    if cached:
+                        image_path = str(cached)
+                    else:
+                        # For remote images, we need to use async operations
+                        # Import here to avoid circular dependency
+                        import asyncio
 
-                    async def fetch_image():
-                        session = (
-                            self.thumbnail_cache._get_session()
-                            if hasattr(self.thumbnail_cache, "_get_session")
-                            else None
-                        )
-                        if not session:
-                            # Fallback to synchronous load
-                            return self._load_image_sync(image_source)
-
-                        # Try cache first
-                        cached = self.thumbnail_cache.get_thumbnail(image_source)
-                        if cached:
-                            return str(cached)
-
-                        # Download and cache
-                        return str(
-                            await self.thumbnail_cache.download_and_cache(
-                                image_source, session
+                        async def fetch_image():
+                            return str(
+                                await self.thumbnail_cache.download_and_cache(image_source, None)
                             )
-                        )
 
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    path = loop.run_until_complete(fetch_image())
-                    loop.close()
-                    image_path = path
+                        # Create a new event loop for this thread since we're in a background thread
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            image_path = loop.run_until_complete(
+                                asyncio.wait_for(fetch_image(), timeout=30)
+                            )
+                        finally:
+                            loop.close()
                 else:
                     # Load local file directly
                     image_path = image_source
@@ -387,9 +379,7 @@ class PreviewDialog(Adw.Dialog):
 
         # Execute in thread
 
-        thread = threading.Thread(
-            target=lambda: GLib.idle_add(on_loaded, load_in_thread())
-        )
+        thread = threading.Thread(target=lambda: GLib.idle_add(on_loaded, load_in_thread()))
         thread.start()
 
     def _load_image_sync(self, image_source):

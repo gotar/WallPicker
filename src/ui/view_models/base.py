@@ -2,9 +2,9 @@
 
 import asyncio
 import sys
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable
 
 import aiohttp
 import gi

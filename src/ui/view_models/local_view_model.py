@@ -89,21 +89,14 @@ class LocalViewModel(BaseViewModel):
         finally:
             self.is_busy = False
 
-    async def set_wallpaper(self, wallpaper: LocalWallpaper) -> bool:
-        """Set wallpaper as desktop background"""
+    def set_wallpaper(self, wallpaper: LocalWallpaper) -> bool:
         try:
             self.is_busy = True
             self.error_message = None
-
             result = self.wallpaper_setter.set_wallpaper(str(wallpaper.path))
-
-            if result:
-                self.emit("wallpaper-set", wallpaper.filename)
-
             return result
-
         except Exception as e:
-            self.error_message = f"Failed to set wallpaper: {e}"
+            self.error_message = str(e)
             return False
         finally:
             self.is_busy = False

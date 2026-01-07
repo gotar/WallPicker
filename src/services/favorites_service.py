@@ -103,9 +103,7 @@ class FavoritesService(BaseService):
                     wallpaper = Wallpaper(
                         id=wallpaper_data.get("id", wallpaper_id),
                         url=wallpaper_data.get("url", ""),
-                        path=wallpaper_data.get(
-                            "path", wallpaper_data.get("thumbs_large", "")
-                        ),
+                        path=wallpaper_data.get("path", wallpaper_data.get("thumbs_large", "")),
                         thumbs_large=wallpaper_data.get(
                             "thumbs_large", wallpaper_data.get("thumbs_small", "")
                         ),
@@ -203,8 +201,7 @@ class FavoritesService(BaseService):
 
         # Build searchable strings from wallpaper data
         search_strings = [
-            f"{w.wallpaper.id} {w.wallpaper.category} {w.wallpaper.url}"
-            for w in favorites
+            f"{w.wallpaper.id} {w.wallpaper.category} {w.wallpaper.url}" for w in favorites
         ]
 
         # Use rapidfuzz for fuzzy matching
@@ -229,7 +226,5 @@ class FavoritesService(BaseService):
             self._favorites = favorites
             self.log_debug(f"Saved {len(favorites)} favorites to {self.favorites_file}")
         except OSError as e:
-            self.log_error(
-                f"Failed to save favorites to {self.favorites_file}: {e}", exc_info=True
-            )
+            self.log_error(f"Failed to save favorites to {self.favorites_file}: {e}", exc_info=True)
             raise ServiceError(f"Failed to save favorites: {e}") from e

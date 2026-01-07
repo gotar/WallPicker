@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import gi
+from aiohttp import ClientError
 
 gi.require_version("Gtk", "4.0")
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -232,7 +233,7 @@ class WallhavenViewModel(BaseViewModel):
             self.current_page = meta.get("current_page", page)
             self.total_pages = meta.get("last_page", page + 1)
 
-        except Exception as e:
+        except (ClientError, ValueError, OSError, Exception) as e:
             self.error_message = f"Failed to search wallpapers: {e}"
             self.wallpapers = []
         finally:
@@ -302,30 +303,21 @@ class WallhavenViewModel(BaseViewModel):
         """Check if pagination navigation is available"""
         return self.has_next_page() or self.has_prev_page()
 
-    async def set_wallpaper(self, wallpaper: Wallpaper) -> bool:
-        """Set wallpaper as desktop background."""
+    def set_wallpaper(self, wallpaper: Wallpaper) -> bool:
         try:
             self.is_busy = True
             self.error_message = None
 
-            local_path = None
+            # Download if needed
+            local_path = self._download_wallpaper_sync(wallpaper)
+            if not local_path:
+                return False
 
-            if wallpaper.path and Path(wallpaper.path).exists():
-                local_path = wallpaper.path
-            else:
-                local_path = await self.download_wallpaper(wallpaper)
-
-            if local_path:
-                result = self.wallpaper_setter.set_wallpaper(local_path)
-                if result:
-                    filename = Path(local_path).name
-                    self.emit("wallpaper-set", filename)
-                return result
-
-            return False
-
+            # Set as wallpaper
+            result = self.wallpaper_setter.set_wallpaper(local_path)
+            return result
         except Exception as e:
-            self.error_message = f"Failed to set wallpaper: {e}"
+            self.error_message = str(e)
             return False
         finally:
             self.is_busy = False
@@ -351,7 +343,7 @@ class WallhavenViewModel(BaseViewModel):
 
             return True
 
-        except Exception as e:
+        except (ValueError, OSError) as e:
             self.error_message = f"Failed to add to favorites: {e}"
             if self.notification_service:
                 self.notification_service.notify_error(f"Failed to add to favorites: {e}")
@@ -385,8 +377,7 @@ class WallhavenViewModel(BaseViewModel):
                 self.error_message = f"Failed to download wallpaper {wallpaper.id}"
                 return None
 
-        except Exception as e:
-            print(f"Download error: {e}")
+        except (ClientError, OSError, ValueError) as e:
             import traceback
 
             traceback.print_exc()

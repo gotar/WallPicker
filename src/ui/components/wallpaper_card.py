@@ -10,7 +10,7 @@ gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Pango", "1.0")
 
-from gi.repository import Gdk, Gtk, Pango  # noqa: E402
+from gi.repository import Gtk, Pango  # noqa: E402
 
 
 class WallpaperCard(Gtk.Box):

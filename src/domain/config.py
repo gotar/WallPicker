@@ -5,6 +5,10 @@ from pathlib import Path
 
 from .exceptions import ConfigError
 
+# Constants
+DEFAULT_RESOLUTION = "1920x1080"
+FILTER_RESOLUTIONS = ["", "1920x1080", "2560x1440", "3840x2160"]
+
 
 @dataclass
 class Config:
@@ -20,13 +24,9 @@ class Config:
             if not isinstance(self.local_wallpapers_dir, Path):
                 raise ConfigError("local_wallpapers_dir must be a Path object")
             if not self.local_wallpapers_dir.exists():
-                raise ConfigError(
-                    f"Directory does not exist: {self.local_wallpapers_dir}"
-                )
+                raise ConfigError(f"Directory does not exist: {self.local_wallpapers_dir}")
             if not self.local_wallpapers_dir.is_dir():
-                raise ConfigError(
-                    f"Path is not a directory: {self.local_wallpapers_dir}"
-                )
+                raise ConfigError(f"Path is not a directory: {self.local_wallpapers_dir}")
 
     @property
     def pictures_dir(self) -> Path:
@@ -56,9 +56,7 @@ class Config:
             else None
         )
         api_key = api_key_value if isinstance(api_key_value, str) else None
-        notifications = (
-            notifications_value if isinstance(notifications_value, bool) else True
-        )
+        notifications = notifications_value if isinstance(notifications_value, bool) else True
 
         return cls(
             local_wallpapers_dir=local_dir,

@@ -1,6 +1,5 @@
 """View for Wallhaven wallpaper browsing."""
 
-import asyncio
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
 
+from core.asyncio_integration import schedule_async  # noqa: E402
 from ui.components.search_filter_bar import SearchFilterBar
 from ui.view_models.wallhaven_view_model import WallhavenViewModel
 
@@ -43,7 +43,7 @@ class WallhavenView(Adw.Bin):
         self._create_pagination_controls()
 
     def _run_async(self, coro):
-        asyncio.create_task(coro)
+        schedule_async(coro)
 
     def _create_filter_bar(self):
         toolbar_wrapper = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -472,17 +472,14 @@ class WallhavenView(Adw.Bin):
         self.view_model.toggle_selection(wallpaper)
 
     def _on_set_wallpaper(self, button, wallpaper):
-        async def set_with_download():
-            result = await self.view_model.set_wallpaper(wallpaper)
-            if result:
-                if self.view_model.notification_service:
-                    self.view_model.notification_service.notify_success(
-                        "Wallpaper set successfully"
-                    )
-                self.update_wallpaper_grid(self.view_model.wallpapers)
-            elif self.view_model.error_message:
-                if self.view_model.notification_service:
-                    self.view_model.notification_service.notify_error(self.view_model.error_message)
+        result = self.view_model.set_wallpaper(wallpaper)
+        if result:
+            if self.view_model.notification_service:
+                self.view_model.notification_service.notify_success("Wallpaper set successfully")
+            self.update_wallpaper_grid(self.view_model.wallpapers)
+        elif self.view_model.error_message:
+            if self.view_model.notification_service:
+                self.view_model.notification_service.notify_error(self.view_model.error_message)
 
         self._run_async(set_with_download())
 

@@ -43,7 +43,7 @@ class ServiceContainer:
         """Get or create service instance."""
         if service_class not in self._services:
             self._create_service(service_class)
-        return self._services[service_class]
+        return self._services[service_class]  # type: ignore
 
     def _create_service(self, service_class: type[T]) -> T:
         """Create service instance using registered factory."""

@@ -3,6 +3,7 @@ Local Wallpaper Service
 Handles browsing, searching, and deleting local wallpapers
 """
 
+import logging
 from pathlib import Path
 
 from gi.repository import GObject
@@ -59,10 +60,7 @@ class LocalWallpaperService:
                 pattern = "*"
 
             for file_path in self.pictures_dir.glob(pattern):
-                if (
-                    file_path.is_file()
-                    and file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS
-                ):
+                if file_path.is_file() and file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS:
                     stat = file_path.stat()
 
                     # Get image resolution
@@ -87,7 +85,7 @@ class LocalWallpaperService:
             # Sort by modification time (newest first)
             wallpapers.sort(key=lambda w: w.modified_time, reverse=True)
         except Exception as e:
-            print(f"Error scanning directory: {e}")
+            logging.error(f"Error scanning directory: {e}")
 
         return wallpapers
 
@@ -107,7 +105,7 @@ class LocalWallpaperService:
                 return True
             return False
         except Exception as e:
-            print(f"Error deleting wallpaper: {e}")
+            logging.error(f"Error deleting wallpaper: {e}")
             return False
 
     def get_pictures_dir(self) -> Path:

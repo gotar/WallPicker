@@ -59,7 +59,7 @@ class TestWallhavenViewModelSearchWallpapers:
         await wallhaven_view_model.search_wallpapers(query="test")
 
         assert wallhaven_view_model.error_message is not None
-        assert "Failed to search" in wallhaven_view_model.error_message
+        assert "Failed to search wallpapers" in wallhaven_view_model.error_message
         assert wallhaven_view_model.wallpapers == []
 
 

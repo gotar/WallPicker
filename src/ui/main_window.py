@@ -2,17 +2,20 @@
 
 # ruff: noqa: E402  # gi.repository imports must follow gi.require_version()
 
-import asyncio
+import logging
 import sys
 from pathlib import Path
+
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, Gtk  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from core.asyncio_integration import schedule_async  # noqa: E402
 
 from services.banner_service import BannerService
 from services.config_service import ConfigService
@@ -105,6 +108,10 @@ class MainWindow(Adw.Application):
             banner_service=self.banner_service,
         )
 
+        # Add responsive breakpoints
+        breakpoint = Adw.Breakpoint(condition=Adw.BreakpointCondition.parse("max-width: 600px"))
+        self.window.add_breakpoint(breakpoint)
+
         self.window.present()
 
     def _load_css(self):
@@ -116,7 +123,7 @@ class MainWindow(Adw.Application):
 
         # Check if CSS file exists
         if not css_path.exists():
-            print(f"Warning: CSS file not found at {css_path}")
+            logging.warning(f"CSS file not found at {css_path}")
             return
 
         # Create CSS provider
@@ -135,9 +142,9 @@ class MainWindow(Adw.Application):
                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
                 )
             else:
-                print("Warning: Could not get default display for CSS loading")
+                logging.warning("Could not get default display for CSS loading")
         except Exception as e:
-            print(f"Error loading CSS: {e}")
+            logging.error(f"Error loading CSS: {e}")
 
 
 class WallPickerWindow(Adw.ApplicationWindow):
@@ -277,8 +284,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
         elif visible_child == self.wallhaven_view:
             # Only load Wallhaven wallpapers if not already loaded
             if not self.wallhaven_view_model.wallpapers:
-                loop = asyncio.get_event_loop()
-                loop.create_task(self.wallhaven_view_model.load_initial_wallpapers())
+                schedule_async(self.wallhaven_view_model.load_initial_wallpapers())
 
     def _on_refresh_button_clicked(self, button):
         """Handle refresh button click."""
@@ -290,8 +296,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
             self.favorites_view_model.load_favorites()
             self.toast_service.show_info("Favorites refreshed")
         elif visible_child == self.wallhaven_view:
-            loop = asyncio.get_event_loop()
-            loop.create_task(self.wallhaven_view_model.load_initial_wallpapers())
+            schedule_async(self.wallhaven_view_model.load_initial_wallpapers())
             self.toast_service.show_info("Wallhaven wallpapers refreshed")
 
     def _setup_gestures(self):
@@ -411,7 +416,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
                 self._focus_search_entry()
                 return True
             elif keyval == Gdk.KEY_r:  # Ctrl+R: Refresh
-                self._on_refresh_clicked(None)
+                self._on_refresh_button_clicked(None)
                 return True
             elif keyval == Gdk.KEY_n:  # Ctrl+N: New search
                 self._focus_search_entry(clear=True)

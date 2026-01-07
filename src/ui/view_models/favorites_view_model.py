@@ -7,10 +7,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from gi.repository import GObject  # noqa: E402
+from gi.repository import GObject  # type: ignore
 
 from domain.favorite import Favorite
-from domain.wallpaper import Wallpaper
+from domain.wallpaper import (
+    Wallpaper,  # noqa: E402
+    WallpaperPurity,
+)
 from services.favorites_service import FavoritesService
 from services.wallpaper_setter import WallpaperSetter
 from ui.view_models.base import BaseViewModel
@@ -31,24 +34,46 @@ class FavoritesViewModel(BaseViewModel):
 
         self._favorites: list[Wallpaper] = []
         self._search_query: str = ""
+        # Initialize properties
+        self.favorites = []
+        self._search_query = ""  # Set directly to avoid triggering search
+        self.search_query = ""
 
-    @GObject.Property(type=object)
-    def favorites(self) -> list[Wallpaper]:
+    favorites = GObject.Property(type=object)
+    search_query = GObject.Property(type=str)
+
+    def get_favorites(self) -> list[Wallpaper]:
         return self._favorites
 
-    @favorites.setter
-    def favorites(self, value: list[Wallpaper]) -> None:
+    def set_favorites(self, value: list[Wallpaper]) -> None:
         self._favorites = value
         self.notify("favorites")
 
-    @GObject.Property(type=str)
-    def search_query(self) -> str:
+    def get_search_query(self) -> str:
         return self._search_query
 
-    @search_query.setter
-    def search_query(self, value: str) -> None:
+    def set_search_query(self, value: str) -> None:
         self._search_query = value
         self.search_favorites(value)
+
+    def get_property(self, prop):
+        if prop == "favorites":
+            return super().get_property(prop)
+        elif prop == "search_query":
+            return self._search_query
+        else:
+            return super().get_property(prop)
+
+    def set_property(self, prop, value):
+        if prop == "favorites":
+            super().set_property(prop, value)
+        elif prop == "search_query":
+            self._search_query = value
+            if value:  # Only search if there's a query
+                self.search_favorites(value)
+            self.notify("search_query")
+        else:
+            super().set_property(prop, value)
 
     def load_favorites(self) -> None:
         try:
@@ -56,11 +81,13 @@ class FavoritesViewModel(BaseViewModel):
             self.error_message = None
 
             favorites = self.favorites_service.get_favorites()
-            self.favorites = favorites
+            self._favorites = [f.wallpaper for f in favorites]  # type: ignore
+            self.notify("favorites")
 
         except Exception as e:
             self.error_message = f"Failed to load favorites: {e}"
-            self.favorites = []
+            self._favorites = []
+            self.notify("favorites")
         finally:
             self.is_busy = False
 
@@ -74,11 +101,13 @@ class FavoritesViewModel(BaseViewModel):
                 self.load_favorites()
             else:
                 results = self.favorites_service.search_favorites(query)
-                self.favorites = results
+                self._favorites = [f.wallpaper for f in results]  # type: ignore
+                self.notify("favorites")
 
         except Exception as e:
             self.error_message = f"Failed to search favorites: {e}"
-            self.favorites = []
+            self._favorites = []
+            self.notify("favorites")
         finally:
             self.is_busy = False
 
@@ -116,7 +145,7 @@ class FavoritesViewModel(BaseViewModel):
                 url=full_url,
                 path=path,
                 resolution=Resolution(width=1920, height=1080),
-                purity="sfw",
+                purity=WallpaperPurity.SFW,
                 category="general",
                 source=source_enum,
             )

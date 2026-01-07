@@ -162,12 +162,8 @@ class LocalView(Adw.BreakpointBin):
                 wallpaper = self.card_wallpaper_map[focused]
                 self._on_add_to_favorites(None, wallpaper)
             return True
-        # Escape: Clear selection and remove focus
         elif keyval == Gdk.KEY_Escape:
             self.view_model.clear_selection()
-            focused = self.wallpaper_grid.get_focus_child()
-            if focused:
-                focused.grab_remove()
             return True
         return False
 

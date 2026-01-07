@@ -313,6 +313,11 @@ class LocalView(Adw.BreakpointBin):
         # Store mapping for keyboard activation
         self.card_wallpaper_map[card] = wallpaper
 
+        gesture = Gtk.GestureClick()
+        gesture.set_button(1)
+        gesture.connect("pressed", self._on_card_clicked, wallpaper)
+        card.add_controller(gesture)
+
         is_selected = wallpaper in self.view_model.get_selected_wallpapers()
         if is_selected:
             card.add_css_class("selected")
@@ -398,13 +403,9 @@ class LocalView(Adw.BreakpointBin):
         card.append(actions_box)
         return card
 
-    def _on_card_clicked(self, gesture, n_press, x, y, wallpaper, card, checkbox):
-        if self.view_model.selection_mode and n_press == 1:
-            checkbox.set_active(not checkbox.get_active())
-        elif n_press == 2:
+    def _on_card_clicked(self, gesture, n_press, x, y, wallpaper):
+        if n_press == 2:
             self._on_set_wallpaper(None, wallpaper)
-            if self.view_model.selection_mode:
-                checkbox.set_active(not checkbox.get_active())
 
     def _on_selection_toggled(self, wallpaper, is_selected):
         self.view_model.toggle_selection(wallpaper)

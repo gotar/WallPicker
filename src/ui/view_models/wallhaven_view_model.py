@@ -340,6 +340,8 @@ class WallhavenViewModel(BaseViewModel):
             self.error_message = None
 
             if self.favorites_service.is_favorite(wallpaper.id):
+                if self.notification_service:
+                    self.notification_service.notify_warning("Already in favorites")
                 return False
 
             self.favorites_service.add_favorite(wallpaper)

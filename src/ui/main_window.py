@@ -73,9 +73,7 @@ class MainWindow(Adw.Application):
             self.favorites_service = FavoritesService()
             self.wallhaven_service = WallhavenService()
             self.thumbnail_cache = ThumbnailCache()
-            self.thumbnail_loader = ThumbnailLoader(
-                thumbnail_cache=self.thumbnail_cache
-            )
+            self.thumbnail_loader = ThumbnailLoader(thumbnail_cache=self.thumbnail_cache)
             self.banner_service = BannerService(self)
 
         self.wallhaven_view_model = WallhavenViewModel(
@@ -111,9 +109,7 @@ class MainWindow(Adw.Application):
         )
 
         # Add responsive breakpoints
-        breakpoint = Adw.Breakpoint(
-            condition=Adw.BreakpointCondition.parse("max-width: 600px")
-        )
+        breakpoint = Adw.Breakpoint(condition=Adw.BreakpointCondition.parse("max-width: 600px"))
         self.window.add_breakpoint(breakpoint)
 
         self.window.present()
@@ -176,9 +172,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
         self.banner_service = banner_service
         self.thumbnail_loader = thumbnail_loader
 
-        self.wallhaven_view_model.connect(
-            "wallpaper-downloaded", self._on_wallpaper_downloaded
-        )
+        self.wallhaven_view_model.connect("wallpaper-downloaded", self._on_wallpaper_downloaded)
 
         self._create_ui()
         self._setup_menu()
@@ -262,9 +256,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
             self.toast_service,
             self.thumbnail_loader,
         )
-        wallhaven_page = self.stack.add_titled(
-            self.wallhaven_view, "wallhaven", "Wallhaven"
-        )
+        wallhaven_page = self.stack.add_titled(self.wallhaven_view, "wallhaven", "Wallhaven")
         wallhaven_page.set_icon_name("globe-symbolic")
 
         self.favorites_view = FavoritesView(
@@ -273,9 +265,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
             self.toast_service,
             self.thumbnail_loader,
         )
-        favorites_page = self.stack.add_titled(
-            self.favorites_view, "favorites", "Favorites"
-        )
+        favorites_page = self.stack.add_titled(self.favorites_view, "favorites", "Favorites")
         favorites_page.set_icon_name("starred-symbolic")
 
         # Connect ViewSwitcherBar to ViewStack
@@ -495,15 +485,11 @@ class WallPickerWindow(Adw.ApplicationWindow):
     def _focus_search_entry(self, clear=False):
         """Focus search entry in current view."""
         visible_child = self.stack.get_visible_child()
-        if visible_child == self.wallhaven_view and hasattr(
-            self.wallhaven_view, "search_entry"
-        ):
+        if visible_child == self.wallhaven_view and hasattr(self.wallhaven_view, "search_entry"):
             if clear:
                 self.wallhaven_view.search_entry.set_text("")
             self.wallhaven_view.search_entry.grab_focus()
-        elif visible_child == self.favorites_view and hasattr(
-            self.favorites_view, "search_entry"
-        ):
+        elif visible_child == self.favorites_view and hasattr(self.favorites_view, "search_entry"):
             if clear:
                 self.favorites_view.search_entry.set_text("")
             self.favorites_view.search_entry.grab_focus()
@@ -516,9 +502,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
         """Handle focus change when tab changes."""
         visible_child = stack.get_visible_child()
         # Focus search entry if available
-        if visible_child == self.wallhaven_view and hasattr(
-            self.wallhaven_view, "search_entry"
-        ):
+        if visible_child == self.wallhaven_view and hasattr(self.wallhaven_view, "search_entry"):
             # Don't auto-focus search on wallhaven, user can use Ctrl+F
             pass
         elif visible_child == self.local_view:
@@ -553,3 +537,20 @@ class WallPickerWindow(Adw.ApplicationWindow):
         current_idx = self.tabs.index(current)
         new_idx = (current_idx - 1) % len(self.tabs)
         self.stack.set_visible_child_name(self.tabs[new_idx])
+
+
+def main():
+    """Entry point for the wallpicker application."""
+    import asyncio
+    import sys
+
+    from gi.events import GLibEventLoopPolicy
+
+    asyncio.set_event_loop_policy(GLibEventLoopPolicy())
+
+    debug = "--debug" in sys.argv
+    if debug:
+        sys.argv.remove("--debug")
+
+    app = MainWindow(debug=debug)
+    app.run()

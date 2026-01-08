@@ -1,7 +1,5 @@
 """Tests for LocalViewModel."""
 
-import pytest
-
 
 class TestLocalViewModelInit:
     """Test LocalViewModel initialization."""
@@ -89,9 +87,10 @@ class TestLocalViewModelDeleteWallpaper:
         local_view_model.load_wallpapers()
         wallpaper = local_view_model.wallpapers[0]
 
-        result = local_view_model.delete_wallpaper(wallpaper)
+        success, message = local_view_model.delete_wallpaper(wallpaper)
 
-        assert result is True
+        assert success is True
+        assert "Deleted" in message
         mock_local_service.delete_wallpaper.assert_called_once_with(wallpaper.path)
 
     def test_delete_removes_from_list(self, local_view_model, mock_local_service):

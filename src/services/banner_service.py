@@ -86,7 +86,9 @@ class BannerService(GObject.Object):
         Args:
             seconds: Seconds before dismissal
         """
-        self._dismiss_timeout = GLib.timeout_add_seconds(seconds, self._on_auto_dismiss_timeout)
+        self._dismiss_timeout = GLib.timeout_add_seconds(
+            seconds, self._on_auto_dismiss_timeout
+        )
 
     def _cancel_auto_dismiss(self) -> None:
         """Cancel scheduled auto-dismiss."""
@@ -125,7 +127,9 @@ class BannerService(GObject.Object):
             css_class="selection-banner",
         )
 
-    def show_storage_warning(self, used_mb: int, limit_mb: int, on_clear_cache: Callable) -> None:
+    def show_storage_warning(
+        self, used_mb: int, limit_mb: int, on_clear_cache: Callable
+    ) -> None:
         """Show storage warning banner.
 
         Args:

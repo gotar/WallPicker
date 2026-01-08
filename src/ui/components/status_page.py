@@ -64,7 +64,9 @@ class WallpaperStatusPage(Adw.Bin):
         # Connect retry button
         self.retry_btn.connect("clicked", self._on_retry_clicked)
 
-    def set_state(self, state: str, title: str = None, description: str = None, callback=None):
+    def set_state(
+        self, state: str, title: str = None, description: str = None, callback=None
+    ):
         """Set the visible state.
 
         Args:

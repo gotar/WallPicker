@@ -1,7 +1,5 @@
 """Tests for FavoritesViewModel."""
 
-import pytest
-
 
 class TestFavoritesViewModelInit:
     """Test FavoritesViewModel initialization."""
@@ -30,7 +28,9 @@ class TestFavoritesViewModelLoadFavorites:
         assert len(favorites_view_model.favorites) == 2
         assert favorites_view_model.is_busy is False
 
-    def test_load_favorites_error_handling(self, favorites_view_model, mock_favorites_service):
+    def test_load_favorites_error_handling(
+        self, favorites_view_model, mock_favorites_service
+    ):
         """Test error handling during load."""
         mock_favorites_service.get_favorites.side_effect = Exception("Test error")
 
@@ -44,7 +44,9 @@ class TestFavoritesViewModelLoadFavorites:
 class TestFavoritesViewModelSearchFavorites:
     """Test search_favorites method."""
 
-    def test_search_empty_query_loads_all(self, favorites_view_model, mock_favorites_service):
+    def test_search_empty_query_loads_all(
+        self, favorites_view_model, mock_favorites_service
+    ):
         """Test that empty search loads all favorites."""
         favorites_view_model.search_favorites("")
 
@@ -56,7 +58,9 @@ class TestFavoritesViewModelSearchFavorites:
         mock_favorites_service.search_favorites.assert_called_once_with("test")
         assert favorites_view_model.search_query == "test"
 
-    def test_search_updates_favorites(self, favorites_view_model, mock_favorites_service):
+    def test_search_updates_favorites(
+        self, favorites_view_model, mock_favorites_service
+    ):
         favorites_view_model.search_favorites("test")
 
         assert len(favorites_view_model.favorites) == 1
@@ -95,7 +99,9 @@ class TestFavoritesViewModelAddFavorite:
 class TestFavoritesViewModelRemoveFavorite:
     """Test remove_favorite method."""
 
-    def test_remove_favorite_success(self, favorites_view_model, mock_favorites_service):
+    def test_remove_favorite_success(
+        self, favorites_view_model, mock_favorites_service
+    ):
         """Test successful favorite removal."""
         favorites_view_model.load_favorites()
         favorite = favorites_view_model.favorites[0]
@@ -148,7 +154,9 @@ class TestFavoritesViewModelRefresh:
 
         assert favorites_view_model.search_query == ""
 
-    def test_refresh_reloads_favorites(self, favorites_view_model, mock_favorites_service):
+    def test_refresh_reloads_favorites(
+        self, favorites_view_model, mock_favorites_service
+    ):
         """Test that refresh reloads favorites."""
         favorites_view_model.refresh_favorites()
 

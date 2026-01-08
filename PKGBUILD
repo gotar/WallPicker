@@ -1,7 +1,7 @@
 # Maintainer: pgotar <pgotar@users.noreply.github.com>
 pkgname=wallpicker
-pkgver=1.1.1
-pkgrel=1
+ pkgver=2.0.0
+ pkgrel=1
 pkgdesc="Modern GTK4/Libadwaita wallpaper picker with Wallhaven integration"
 arch=('any')
 url="https://github.com/gotar/wallpicker"
@@ -11,13 +11,12 @@ depends=(
   'gtk4'
   'libadwaita'
 )
-makedepends=('python-build' 'python-installer' 'python-wheel' 'git')
+makedepends=('python-setuptools' 'python-wheel')
 optdepends=('awww: Animated wallpaper transitions')
-source=("${pkgname}::git+https://github.com/gotar/wallpicker.git#tag=v${pkgver}")
+source=("${pkgname}-${pkgver}.tar.gz")
 sha256sums=('SKIP')
 
 build() {
-  cd "${srcdir}/${pkgname}"
   python -m build
 }
 

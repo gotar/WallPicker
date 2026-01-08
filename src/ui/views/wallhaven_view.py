@@ -1,5 +1,6 @@
 """View for Wallhaven wallpaper browsing."""
 
+import logging
 import sys
 from pathlib import Path
 
@@ -13,18 +14,29 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
 
 from core.asyncio_integration import schedule_async  # noqa: E402
-from ui.components.search_filter_bar import SearchFilterBar
-from ui.view_models.wallhaven_view_model import WallhavenViewModel
+from ui.components.search_filter_bar import SearchFilterBar  # noqa: E402
+from ui.view_models.wallhaven_view_model import WallhavenViewModel  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 class WallhavenView(Adw.Bin):
     """View for Wallhaven wallpaper browsing with adaptive layout"""
 
-    def __init__(self, view_model: WallhavenViewModel, banner_service=None):
+    def __init__(
+        self,
+        view_model: WallhavenViewModel,
+        banner_service=None,
+        toast_service=None,
+        thumbnail_loader=None,
+    ):
         super().__init__()
         self.view_model = view_model
         self.banner_service = banner_service
+        self.toast_service = toast_service
+        self.thumbnail_loader = thumbnail_loader
         self._last_selected_wallpaper = None
+        self._search_debounce_timer = None
 
         self._create_ui()
 
@@ -59,18 +71,58 @@ class WallhavenView(Adw.Bin):
         toolbar_wrapper.append(self.search_filter_bar)
 
     def _on_search_text_changed(self, text: str):
-        if text:
-            self.view_model.query = text
+        if self._search_debounce_timer:
+            GLib.source_remove(self._search_debounce_timer)
+
+        self.view_model.search_query = text
+        self._search_debounce_timer = GLib.timeout_add(
+            300, self._trigger_search_refresh
+        )
 
     def _on_sort_changed(self, sorting: str):
         if sorting:
+            logger.info(f"Sort changed to: {sorting}")
             self.view_model.sorting = sorting
+            self._trigger_search_refresh()
 
     def _on_filter_changed(self, filters: dict):
+        logger.info(f"Filters changed: {filters}")
+        self.view_model.category = filters.get("category", "111")
+        self.view_model.purity = filters.get("purity", "100")
         self.view_model.top_range = filters.get("top_range", "")
         self.view_model.ratios = filters.get("ratios", "")
         self.view_model.colors = filters.get("colors", "")
         self.view_model.resolutions = filters.get("resolutions", "")
+        self._trigger_search_refresh()
+
+    def _trigger_search_refresh(self) -> bool:
+        if self._search_debounce_timer:
+            self._search_debounce_timer = None
+
+        logger.info(
+            f"Triggering search: query='{self.view_model.search_query}', "
+            f"category={self.view_model.category}, purity={self.view_model.purity}, "
+            f"sorting={self.view_model.sorting}"
+        )
+
+        async def perform_search():
+            await self.view_model.search_wallpapers(
+                query=self.view_model.search_query,
+                page=1,
+                category=self.view_model.category,
+                purity=self.view_model.purity,
+                sorting=self.view_model.sorting,
+                order=self.view_model.order,
+                resolution=self.view_model.resolution,
+                top_range=self.view_model.top_range,
+                ratios=self.view_model.ratios,
+                colors=self.view_model.colors,
+                resolutions=self.view_model.resolutions,
+                seed=self.view_model.seed,
+            )
+
+        self._run_async(perform_search())
+        return False
 
     def _create_wallpaper_grid(self):
         """Create wallpaper grid display"""
@@ -80,7 +132,7 @@ class WallhavenView(Adw.Bin):
         # Create flow box for wallpaper grid
         self.wallpaper_grid = Gtk.FlowBox()
         self.wallpaper_grid.set_homogeneous(True)
-        self.wallpaper_grid.set_min_children_per_line(2)
+        self.wallpaper_grid.set_min_children_per_line(4)
         self.wallpaper_grid.set_max_children_per_line(12)
         self.wallpaper_grid.set_column_spacing(12)
         self.wallpaper_grid.set_row_spacing(12)
@@ -94,7 +146,9 @@ class WallhavenView(Adw.Bin):
         status_box.add_css_class("status-bar")
         status_box.set_halign(Gtk.Align.CENTER)
 
-        self.prev_btn = Gtk.Button(icon_name="go-previous-symbolic", tooltip_text="Previous page")
+        self.prev_btn = Gtk.Button(
+            icon_name="go-previous-symbolic", tooltip_text="Previous page"
+        )
         self.prev_btn.set_sensitive(False)
         self.prev_btn.connect("clicked", self._on_prev_page_clicked)
         status_box.append(self.prev_btn)
@@ -102,7 +156,9 @@ class WallhavenView(Adw.Bin):
         self.page_label = Gtk.Label(label="Page 1 / 1 - 0 wallpapers")
         status_box.append(self.page_label)
 
-        self.next_btn = Gtk.Button(icon_name="go-next-symbolic", tooltip_text="Next page")
+        self.next_btn = Gtk.Button(
+            icon_name="go-next-symbolic", tooltip_text="Next page"
+        )
         self.next_btn.set_sensitive(False)
         self.next_btn.connect("clicked", self._on_next_page_clicked)
         status_box.append(self.next_btn)
@@ -113,7 +169,9 @@ class WallhavenView(Adw.Bin):
         self.view_model.connect("notify::wallpapers", self._on_wallpapers_changed)
         self.view_model.connect("notify::current-page", self._on_page_changed)
         self.view_model.connect("notify::total-pages", self._on_page_changed)
+        self.view_model.connect("notify::total-wallpapers", self._on_page_changed)
         self.view_model.connect("notify::selected-count", self._on_selection_changed)
+        self.view_model.connect("notify::is-busy", self._on_busy_changed)
 
     def _setup_keyboard_shortcuts(self):
         key_controller = Gtk.EventControllerKey()
@@ -290,15 +348,6 @@ class WallhavenView(Adw.Bin):
         self.is_refreshing = False
         return False
 
-    def _on_key_pressed(self, controller, keyval, keycode, state):
-        if state & Gdk.ModifierType.CONTROL_MASK and keyval == Gdk.KEY_a:
-            self.view_model.select_all()
-            return True
-        elif keyval == Gdk.KEY_Escape:
-            self.view_model.clear_selection()
-            return True
-        return False
-
     def _on_selection_changed(self, obj, pspec):
         count = self.view_model.selected_count
         if count > 0 and self.banner_service:
@@ -346,14 +395,26 @@ class WallhavenView(Adw.Bin):
             self.view_model.total_pages,
         )
 
+    def _on_busy_changed(self, obj, pspec):
+        self.update_pagination(
+            self.view_model.current_page,
+            self.view_model.total_pages,
+        )
+
     def update_wallpaper_grid(self, wallpapers):
         """Update wallpaper grid with new wallpapers"""
-        while child := self.wallpaper_grid.get_first_child():
-            self.wallpaper_grid.remove(child)
 
-        for wallpaper in wallpapers:
-            card = self._create_wallpaper_card(wallpaper)
-            self.wallpaper_grid.append(card)
+        def clear_and_update():
+            while child := self.wallpaper_grid.get_first_child():
+                self.wallpaper_grid.remove(child)
+
+            for wallpaper in wallpapers:
+                card = self._create_wallpaper_card(wallpaper)
+                self.wallpaper_grid.append(card)
+
+            return False
+
+        GLib.idle_add(clear_and_update)
 
     def _create_wallpaper_card(self, wallpaper):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -376,8 +437,8 @@ class WallhavenView(Adw.Bin):
                 image.set_paintable(texture)
 
         thumb_url = wallpaper.thumbs_large or wallpaper.thumbs_small or ""
-        if thumb_url:
-            self.view_model.load_thumbnail_async(thumb_url, on_thumbnail_loaded)
+        if thumb_url and self.thumbnail_loader:
+            self.thumbnail_loader.load_thumbnail_async(thumb_url, on_thumbnail_loaded)
 
         overlay = Gtk.Overlay()
         overlay.set_child(image)
@@ -443,14 +504,18 @@ class WallhavenView(Adw.Bin):
         download_btn.connect("clicked", self._on_download_wallpaper, wallpaper)
         actions_box.append(download_btn)
 
-        set_btn = Gtk.Button(icon_name="image-x-generic-symbolic", tooltip_text="Set as wallpaper")
+        set_btn = Gtk.Button(
+            icon_name="image-x-generic-symbolic", tooltip_text="Set as wallpaper"
+        )
         set_btn.add_css_class("action-button")
         set_btn.add_css_class("suggested-action")
         set_btn.set_cursor_from_name("pointer")
         set_btn.connect("clicked", self._on_set_wallpaper, wallpaper)
         actions_box.append(set_btn)
 
-        fav_btn = Gtk.Button(icon_name="starred-symbolic", tooltip_text="Add to favorites")
+        fav_btn = Gtk.Button(
+            icon_name="starred-symbolic", tooltip_text="Add to favorites"
+        )
         fav_btn.add_css_class("action-button")
         fav_btn.add_css_class("favorite-action")
         fav_btn.set_cursor_from_name("pointer")
@@ -472,49 +537,60 @@ class WallhavenView(Adw.Bin):
         self.view_model.toggle_selection(wallpaper)
 
     def _on_set_wallpaper(self, button, wallpaper):
-        result = self.view_model.set_wallpaper(wallpaper)
-        if result:
-            if self.view_model.notification_service:
-                self.view_model.notification_service.notify_success("Wallpaper set successfully")
-            self.update_wallpaper_grid(self.view_model.wallpapers)
-        elif self.view_model.error_message:
-            if self.view_model.notification_service:
-                self.view_model.notification_service.notify_error(self.view_model.error_message)
+        async def set_wallpaper_with_download():
+            success, message = await self.view_model.set_wallpaper_async(wallpaper)
+            if success:
+                if self.toast_service:
+                    self.toast_service.show_success(message)
+                self.update_wallpaper_grid(self.view_model.wallpapers)
+            else:
+                if self.toast_service:
+                    self.toast_service.show_error(message)
 
-        self._run_async(set_with_download())
+        self._run_async(set_wallpaper_with_download())
 
     def _on_card_double_clicked(self, gesture, n_press, x, y, wallpaper):
         self._on_set_wallpaper(None, wallpaper)
 
     def _on_download_wallpaper(self, button, wallpaper):
         async def download_only():
-            downloaded = await self.view_model.download_wallpaper(wallpaper)
-            if downloaded and downloaded.path:
-                if self.view_model.notification_service:
-                    self.view_model.notification_service.notify_success(
-                        f"Wallpaper downloaded to: {downloaded.path}"
-                    )
+            path, message = await self.view_model.download_wallpaper_async(wallpaper)
+            if path:
+                if self.toast_service:
+                    self.toast_service.show_success(message)
                 self.update_wallpaper_grid(self.view_model.wallpapers)
-            elif self.view_model.error_message:
-                if self.view_model.notification_service:
-                    self.view_model.notification_service.notify_error(self.view_model.error_message)
+            else:
+                if self.toast_service:
+                    self.toast_service.show_error(message)
 
         self._run_async(download_only())
 
     def _on_add_to_favorites(self, button, wallpaper):
         async def add_to_favs():
-            result = await self.view_model.add_to_favorites(wallpaper)
-            if result and self.view_model.notification_service:
-                self.view_model.notification_service.notify_success("Added to favorites")
-            elif not result and self.view_model.notification_service:
-                self.view_model.notification_service.notify_error("Failed to add to favorites")
+            success, message = await self.view_model.add_to_favorites_async(wallpaper)
+            if success:
+                if self.toast_service:
+                    self.toast_service.show_success(message)
+            else:
+                if self.toast_service:
+                    self.toast_service.show_error(message)
 
         self._run_async(add_to_favs())
 
     def update_pagination(self, current_page: int, total_pages: int):
         wallpaper_count = len(self.view_model.wallpapers)
-        self.page_label.set_text(
-            f"Page {current_page} / {total_pages} - {wallpaper_count} wallpapers"
-        )
-        self.prev_btn.set_sensitive(current_page > 1)
-        self.next_btn.set_sensitive(current_page < total_pages)
+        total_wallpapers = self.view_model.total_wallpapers
+
+        if total_wallpapers > 0:
+            self.page_label.set_text(
+                f"Page {current_page} / {total_pages} - {wallpaper_count} wallpapers "
+                f"(Total: {total_wallpapers:,})"
+            )
+        else:
+            self.page_label.set_text(
+                f"Page {current_page} / {total_pages} - {wallpaper_count} wallpapers"
+            )
+
+        is_busy = self.view_model.is_busy
+        self.prev_btn.set_sensitive(current_page > 1 and not is_busy)
+        self.next_btn.set_sensitive(current_page < total_pages and not is_busy)

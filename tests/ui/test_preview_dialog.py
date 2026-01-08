@@ -7,26 +7,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from domain.wallpaper import Wallpaper, WallpaperSource, WallpaperPurity, Resolution
-
 
 def test_preview_dialog_creation():
     """Test that PreviewDialog can be instantiated."""
     print("Testing PreviewDialog creation...")
 
-    # Create sample wallpaper
-    wallpaper = Wallpaper(
-        id="test-123",
-        url="https://example.com/wallpaper.jpg",
-        path="/tmp/test.jpg",
-        resolution=Resolution(1920, 1080),
-        source=WallpaperSource.LOCAL,
-        category="test",
-        purity=WallpaperPurity.SFW,
-        file_size=2400000,
-    )
-
-    print("✓ Created test wallpaper object")
+    print("✓ Test setup complete")
 
     # Import PreviewDialog
     from ui.components.preview_dialog import PreviewDialog
@@ -51,8 +37,9 @@ def test_preview_dialog_api():
     """Test PreviewDialog API surface."""
     print("\nTesting PreviewDialog API...")
 
-    from ui.components.preview_dialog import PreviewDialog
     import inspect
+
+    from ui.components.preview_dialog import PreviewDialog
 
     # Get __init__ signature
     sig = inspect.signature(PreviewDialog.__init__)
@@ -82,7 +69,9 @@ def test_preview_dialog_api():
     # Check public methods
     public_methods = [
         name
-        for name, method in inspect.getmembers(PreviewDialog, predicate=inspect.isfunction)
+        for name, method in inspect.getmembers(
+            PreviewDialog, predicate=inspect.isfunction
+        )
         if not name.startswith("_")
     ]
 
@@ -101,7 +90,10 @@ def test_css_classes():
     ui_source = inspect.getsource(PreviewDialog._create_ui)
     actions_source = inspect.getsource(PreviewDialog._create_actions_section)
 
-    assert ".preview-image-container" in ui_source or '"preview-image-container"' in ui_source
+    assert (
+        ".preview-image-container" in ui_source
+        or '"preview-image-container"' in ui_source
+    )
     assert ".preview-sidebar" in ui_source or '"preview-sidebar"' in ui_source
     assert ".pill" in actions_source or '"pill"' in actions_source
 
@@ -129,8 +121,9 @@ def test_keyboard_shortcuts():
     """Test keyboard shortcut handling."""
     print("\nTesting keyboard shortcuts...")
 
-    from ui.components.preview_dialog import PreviewDialog
     import inspect
+
+    from ui.components.preview_dialog import PreviewDialog
 
     # Check that _on_key_pressed method exists and handles expected keys
     key_pressed_source = inspect.getsource(PreviewDialog._on_key_pressed)

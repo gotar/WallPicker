@@ -2,16 +2,12 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, Mock
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import gi
 
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk
-
-import pytest
 
 
 class TestSwipeGestures:
@@ -25,9 +21,9 @@ class TestSwipeGestures:
 
     def test_swipe_logic_thresholds(self):
         """Test swipe logic uses correct dx thresholds."""
-        from ui.main_window import WallPickerWindow
-
         import inspect
+
+        from ui.main_window import WallPickerWindow
 
         source = inspect.getsource(WallPickerWindow._on_swipe)
 
@@ -52,9 +48,9 @@ class TestKeyboardShortcuts:
 
     def test_ctrl_1_selects_local_tab(self):
         """Test Ctrl+1 selects local tab."""
-        from ui.main_window import WallPickerWindow
-
         import inspect
+
+        from ui.main_window import WallPickerWindow
 
         source = inspect.getsource(WallPickerWindow._on_key_pressed)
 
@@ -63,9 +59,9 @@ class TestKeyboardShortcuts:
 
     def test_ctrl_2_selects_wallhaven_tab(self):
         """Test Ctrl+2 selects wallhaven tab."""
-        from ui.main_window import WallPickerWindow
-
         import inspect
+
+        from ui.main_window import WallPickerWindow
 
         source = inspect.getsource(WallPickerWindow._on_key_pressed)
 
@@ -74,9 +70,9 @@ class TestKeyboardShortcuts:
 
     def test_ctrl_3_selects_favorites_tab(self):
         """Test Ctrl+3 selects favorites tab."""
-        from ui.main_window import WallPickerWindow
-
         import inspect
+
+        from ui.main_window import WallPickerWindow
 
         source = inspect.getsource(WallPickerWindow._on_key_pressed)
 

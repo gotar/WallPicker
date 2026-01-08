@@ -9,7 +9,7 @@ from gi.events import GLibEventLoopPolicy
 src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
 sys.path.insert(0, src_path)  # noqa: E402
 
-from ui.main_window import MainWindow
+from ui.main_window import MainWindow  # noqa: E402
 
 
 def main():

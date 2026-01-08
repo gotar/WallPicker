@@ -6,7 +6,9 @@ from pathlib import Path
 class WallpaperSetter:
     def __init__(self):
         self.cache_dir = Path.home() / ".cache" / "wallpaper"
-        self.symlink_path = Path.home() / ".config" / "omarchy" / "current" / "background"
+        self.symlink_path = (
+            Path.home() / ".config" / "omarchy" / "current" / "background"
+        )
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.symlink_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -21,7 +23,17 @@ class WallpaperSetter:
             self._apply_wallpaper(path)
             self._cleanup_old_wallpapers()
             return True
-        except Exception:
+        except (OSError, subprocess.SubprocessError, RuntimeError) as e:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to set wallpaper: {e}", exc_info=True)
+            return False
+        except Exception as e:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.critical(f"Unexpected error setting wallpaper: {e}", exc_info=True)
             return False
 
     def _ensure_daemon_running(self):
@@ -73,6 +85,9 @@ class WallpaperSetter:
                 target = self.symlink_path.resolve()
                 if target.exists():
                     return str(target)
-            except Exception:
-                pass
+            except (OSError, RuntimeError) as e:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Could not resolve symlink {self.symlink_path}: {e}")
         return None

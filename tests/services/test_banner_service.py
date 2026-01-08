@@ -1,12 +1,12 @@
 """Tests for BannerService."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, Mock, patch
-from gi.repository import GObject
 
 from services.banner_service import (
-    BannerService,
     BannerPriority,
+    BannerService,
     BannerType,
 )
 

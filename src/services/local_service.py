@@ -60,7 +60,10 @@ class LocalWallpaperService:
                 pattern = "*"
 
             for file_path in self.pictures_dir.glob(pattern):
-                if file_path.is_file() and file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS:
+                if (
+                    file_path.is_file()
+                    and file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS
+                ):
                     stat = file_path.stat()
 
                     # Get image resolution
@@ -69,8 +72,10 @@ class LocalWallpaperService:
                         with Image.open(file_path) as img:
                             width, height = img.size
                             resolution = f"{width}x{height}"
-                    except Exception:
-                        pass
+                    except (OSError, ValueError) as e:
+                        logging.debug(
+                            f"Could not read image dimensions from {file_path}: {e}"
+                        )
 
                     wallpapers.append(
                         LocalWallpaper(

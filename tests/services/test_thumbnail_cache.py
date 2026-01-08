@@ -6,9 +6,9 @@ from pathlib import Path
 
 import aiohttp
 import pytest
-from domain.exceptions import ServiceError
 from pytest_mock import MockerFixture
 
+from domain.exceptions import ServiceError
 from services.thumbnail_cache import ThumbnailCache
 
 
@@ -222,13 +222,13 @@ class TestDownloadAndCache:
         mock_response.headers = {"content-length": "1000"}
         mock_response.raise_for_status = mocker.Mock()
         mock_response.read.return_value = b"data"
-        aiohttp_session.get.side_effect = (
-            lambda *args, **kwargs: asyncio.Future()
+        aiohttp_session.get.side_effect = lambda *args, **kwargs: (
+            asyncio.Future()
             if asyncio.iscoroutinefunction(mock_response)
             else mock_response
         )
 
-        with pytest.raises(Exception):  # Will fail but cleanup was called
+        with pytest.raises(Exception):  # noqa: B017
             await cache.download_and_cache(url, aiohttp_session)
 
         cleanup_mock.assert_called_once()
@@ -238,7 +238,9 @@ class TestGetOrDownload:
     """Test get_or_download method."""
 
     @pytest.mark.asyncio
-    async def test_get_or_download_cache_hit(self, tmp_path: Path, mocker: MockerFixture):
+    async def test_get_or_download_cache_hit(
+        self, tmp_path: Path, mocker: MockerFixture
+    ):
         """Test get_or_download returns cached thumbnail if available."""
         cache = ThumbnailCache(cache_dir=tmp_path)
         url = "http://example.com/image.jpg"

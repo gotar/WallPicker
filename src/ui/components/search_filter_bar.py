@@ -65,7 +65,9 @@ class SearchFilterBar(Gtk.Box):
         self.add_css_class("search-filter-bar")
 
         # Search entry
-        self.search_entry = Gtk.SearchEntry(placeholder_text=self._get_search_placeholder())
+        self.search_entry = Gtk.SearchEntry(
+            placeholder_text=self._get_search_placeholder()
+        )
         self.search_entry.set_hexpand(True)
         self.search_entry.set_size_request(300, -1)
         self.append(self.search_entry)
@@ -87,7 +89,9 @@ class SearchFilterBar(Gtk.Box):
             self._create_filter_popover()
 
         # Active filter chips (initially hidden)
-        self._chips_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._chips_container = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8
+        )
         self._chips_container.add_css_class("filter-chips")
         self._chips_container.set_visible(False)
 
@@ -109,7 +113,9 @@ class SearchFilterBar(Gtk.Box):
         self.sort_dropdown.set_model(string_list)
 
         # Store sort mapping for value lookup
-        self._sort_mapping = {idx: value for idx, (_, value) in enumerate(self._sort_options_list)}
+        self._sort_mapping = {
+            idx: value for idx, (_, value) in enumerate(self._sort_options_list)
+        }
 
     def _get_sort_options(self) -> list[tuple[str, str]]:
         """Get sort options for current tab type.
@@ -258,17 +264,8 @@ class SearchFilterBar(Gtk.Box):
             self.color_combo.set_model(color_list)
             content_box.append(self.color_combo)
 
-        # Apply button
-        apply_btn = Gtk.Button(label="Apply Filters")
-        apply_btn.add_css_class("suggested-action")
-        apply_btn.set_halign(Gtk.Align.END)
-        content_box.append(apply_btn)
-
         self.filter_popover.set_child(content_box)
         self.filter_btn.set_popover(self.filter_popover)
-
-        # Connect apply button
-        apply_btn.connect("clicked", self._on_apply_filters)
 
     def _setup_callbacks(self):
         """Setup signal callbacks."""
@@ -288,7 +285,9 @@ class SearchFilterBar(Gtk.Box):
             self.purity_nsfw.connect("toggled", self._on_purity_toggled)
 
             # Resolution dropdown
-            self.resolution_dropdown.connect("notify::selected", self._on_resolution_changed)
+            self.resolution_dropdown.connect(
+                "notify::selected", self._on_resolution_changed
+            )
 
             # Advanced filters
             self.top_range_combo.connect("notify::selected", self._on_top_range_changed)
@@ -361,6 +360,8 @@ class SearchFilterBar(Gtk.Box):
             if self._on_filter_changed_callback:
                 self._on_filter_changed_callback(self._active_filters)
 
+            self.filter_popover.popdown()
+
     def _on_purity_toggled(self, button: Gtk.CheckButton):
         """Handle purity checkbox toggle (Wallhaven only)."""
         purity_bits = ""
@@ -405,6 +406,8 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
+        self.filter_popover.popdown()
+
     def _on_resolution_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
         """Handle resolution dropdown change."""
         selected = dropdown.get_selected()
@@ -423,6 +426,8 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
+        self.filter_popover.popdown()
+
     def _on_top_range_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
         selected = dropdown.get_selected()
         if selected == 0:
@@ -439,6 +444,8 @@ class SearchFilterBar(Gtk.Box):
 
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
+
+        self.filter_popover.popdown()
 
     def _on_aspect_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
         """Handle aspect ratio dropdown change (Wallhaven only)."""
@@ -458,37 +465,7 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
-    def _on_color_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
-        """Handle color dropdown change (Wallhaven only)."""
-        selected = dropdown.get_selected()
-        if selected == 0:
-            self._remove_filter_chip_by_type("colors")
-            if "colors" in self._active_filters:
-                del self._active_filters["colors"]
-        else:
-            colors = [
-                "",
-                "660000",
-                "ff9900",
-                "ffcc33",
-                "ffff00",
-                "77cc33",
-                "66cccc",
-                "0066cc",
-                "993399",
-                "663399",
-                "333399",
-                "cccc33",
-                "ea4c88",
-            ]
-            if selected < len(colors):
-                value = colors[selected]
-                name = dropdown.get_model().get_string(selected)
-                self._active_filters["colors"] = value
-                self._add_filter_chip("Color", name)
-
-        if self._on_filter_changed_callback:
-            self._on_filter_changed_callback(self._active_filters)
+        self.filter_popover.popdown()
 
     def _on_color_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
         """Handle color dropdown change (Wallhaven only)."""
@@ -522,8 +499,6 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
-    def _on_apply_filters(self, button: Gtk.Button):
-        """Handle apply filters button click (Wallhaven only)."""
         self.filter_popover.popdown()
 
     def _add_filter_chip(self, filter_type: str, value: str):
@@ -575,7 +550,8 @@ class SearchFilterBar(Gtk.Box):
                 child.add_css_class("chip-removing")
                 chip_to_remove = child
                 GLib.timeout_add(
-                    200, lambda c=chip_to_remove: self._chips_container.remove(c) or False
+                    200,
+                    lambda c=chip_to_remove: self._chips_container.remove(c) or False,
                 )
                 break
             child = next_child

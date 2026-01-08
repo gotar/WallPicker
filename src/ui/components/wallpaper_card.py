@@ -78,7 +78,12 @@ class WallpaperCard(Gtk.Box):
         self.add_css_class("touch-feedback")
 
     def _on_card_pressed(self, gesture, n_press, x, y):
-        if self.selection_mode and n_press == 1 and self.checkbox and not self.checkbox.has_focus():
+        if (
+            self.selection_mode
+            and n_press == 1
+            and self.checkbox
+            and not self.checkbox.has_focus()
+        ):
             self.checkbox.set_active(not self.checkbox.get_active())
         elif n_press == 2:
             if self.on_set_wallpaper:
@@ -149,7 +154,9 @@ class WallpaperCard(Gtk.Box):
         """Load thumbnail asynchronously."""
         # This will be called by the view with view_model.load_thumbnail_async
         # Set a callback property for the view to use
-        self._thumbnail_loader = lambda thumbnail_path: self._on_thumbnail_loaded(thumbnail_path)
+        self._thumbnail_loader = lambda thumbnail_path: self._on_thumbnail_loaded(
+            thumbnail_path
+        )
 
     def _on_thumbnail_loaded(self, texture):
         """Handle thumbnail load completion."""
@@ -313,7 +320,9 @@ class WallpaperCard(Gtk.Box):
             download_btn.add_css_class("action-button")
             download_btn.add_css_class("download-action")
             download_btn.set_accessible_name("Download wallpaper")
-            download_btn.set_accessible_description("Save this wallpaper to your local collection")
+            download_btn.set_accessible_description(
+                "Save this wallpaper to your local collection"
+            )
             download_btn.set_accessible_role(Gtk.AccessibleRole.BUTTON)
             download_btn.connect("clicked", self.on_download)
             actions_box.append(download_btn)
@@ -326,7 +335,9 @@ class WallpaperCard(Gtk.Box):
             info_btn.add_css_class("action-button")
             info_btn.add_css_class("info-action")
             info_btn.set_accessible_name("More options")
-            info_btn.set_accessible_description("View wallpaper details and additional options")
+            info_btn.set_accessible_description(
+                "View wallpaper details and additional options"
+            )
             info_btn.set_accessible_role(Gtk.AccessibleRole.BUTTON)
             info_btn.connect("clicked", self.on_info)
             actions_box.append(info_btn)

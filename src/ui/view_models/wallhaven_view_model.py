@@ -1,5 +1,7 @@
 """ViewModel for Wallhaven wallpaper browsing"""
 
+import asyncio
+import logging
 import sys
 from pathlib import Path
 
@@ -11,24 +13,28 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from gi.repository import GObject  # noqa: E402
 
-from domain.wallpaper import Wallpaper
-from services.favorites_service import FavoritesService
-from services.thumbnail_cache import ThumbnailCache
-from services.wallhaven_service import WallhavenService
-from ui.view_models.base import BaseViewModel
+from domain.wallpaper import Wallpaper  # noqa: E402
+from services.favorites_service import FavoritesService  # noqa: E402
+from services.wallhaven_service import WallhavenService  # noqa: E402
+from ui.view_models.base import BaseViewModel  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 class WallhavenViewModel(BaseViewModel):
     """ViewModel for Wallhaven wallpaper browsing"""
 
+    __gsignals__ = {
+        "wallpaper-downloaded": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+    }
+
     def __init__(
         self,
         wallhaven_service: WallhavenService,
-        thumbnail_cache: ThumbnailCache,
         wallpaper_setter,
         config_service,
     ) -> None:
-        super().__init__(thumbnail_cache=thumbnail_cache)
+        super().__init__()
         self.wallhaven_service = wallhaven_service
         self.wallpaper_setter = wallpaper_setter
         self.config_service = config_service
@@ -37,6 +43,7 @@ class WallhavenViewModel(BaseViewModel):
         self._wallpapers: list[Wallpaper] = []
         self._current_page = 1
         self._total_pages = 1
+        self._total_wallpapers = 0
         self._search_query = ""
         self._category = "111"
         self._purity = "100"
@@ -48,6 +55,12 @@ class WallhavenViewModel(BaseViewModel):
         self._colors = ""
         self._resolutions = ""
         self._seed = ""
+
+        # Async lock to prevent concurrent searches
+        self._search_lock = asyncio.Lock()
+
+        # Async lock to prevent concurrent add_to_favorites operations
+        self._add_to_favorites_lock = asyncio.Lock()
 
     @GObject.Property(type=object)
     def wallpapers(self) -> list[Wallpaper]:
@@ -72,6 +85,14 @@ class WallhavenViewModel(BaseViewModel):
     @total_pages.setter
     def total_pages(self, value: int) -> None:
         self._total_pages = value
+
+    @GObject.Property(type=int, default=0)
+    def total_wallpapers(self) -> int:
+        return self._total_wallpapers
+
+    @total_wallpapers.setter
+    def total_wallpapers(self, value: int) -> None:
+        self._total_wallpapers = value
 
     @GObject.Property(type=str, default="")
     def search_query(self) -> str:
@@ -163,6 +184,7 @@ class WallhavenViewModel(BaseViewModel):
 
     async def load_initial_wallpapers(self) -> None:
         """Load initial wallpapers with current parameters"""
+        logger.info("Loading initial Wallhaven wallpapers")
         await self.search_wallpapers(
             query=self.search_query,
             page=1,
@@ -177,6 +199,7 @@ class WallhavenViewModel(BaseViewModel):
             resolutions=self.resolutions,
             seed=self.seed,
         )
+        logger.info(f"Loaded {len(self.wallpapers)} wallpapers")
 
     async def search_wallpapers(
         self,
@@ -194,50 +217,69 @@ class WallhavenViewModel(BaseViewModel):
         seed: str = "",
         append_results: bool = False,
     ) -> None:
-        """Search wallpapers on Wallhaven"""
-        try:
-            self.is_busy = True
-            self.error_message = None
-            self.search_query = query
-            self.category = category
-            self.purity = purity
-            self.sorting = sorting
-            self.order = order
-            self.resolution = resolution
-            self.top_range = top_range
-            self.ratios = ratios
-            self.colors = colors
-            self.resolutions = resolutions
-            self.seed = seed
-
-            wallpapers, meta = await self.wallhaven_service.search(
-                query=query,
-                page=page,
-                categories=category,
-                purity=purity,
-                sorting=sorting,
-                order=order,
-                atleast=resolution,
-                top_range=top_range,
-                ratios=ratios,
-                colors=colors,
-                resolutions=resolutions,
-                seed=seed,
+        """Search wallpapers on Wallhaven with concurrent search protection"""
+        # Try to acquire lock - if another search is running, skip this one
+        if self._search_lock.locked():
+            logger.debug(
+                "Search already in progress, skipping concurrent search request"
             )
+            return
 
-            if append_results and self.wallpapers:
-                self.wallpapers = self.wallpapers + wallpapers
-            else:
-                self.wallpapers = wallpapers
+        async with self._search_lock:
+            try:
+                self.is_busy = True
+                self.error_message = None
+                self.search_query = query
+                self.category = category
+                self.purity = purity
+                self.sorting = sorting
+                self.order = order
+                self.resolution = resolution
+                self.top_range = top_range
+                self.ratios = ratios
+                self.colors = colors
+                self.resolutions = resolutions
+                self.seed = seed
 
-            self.current_page = meta.get("current_page", page)
-            self.total_pages = meta.get("last_page", page + 1)
+                logger.debug(
+                    f"Starting search: query='{query}', category={category}, page={page}"
+                )
 
-        except (ClientError, ValueError, OSError, Exception) as e:
-            self.error_message = f"Failed to search wallpapers: {e}"
-            self.wallpapers = []
-        finally:
-            self.is_busy = False
+                wallpapers, meta = await self.wallhaven_service.search(
+                    query=query,
+                    page=page,
+                    categories=category,
+                    purity=purity,
+                    sorting=sorting,
+                    order=order,
+                    atleast=resolution,
+                    top_range=top_range,
+                    ratios=ratios,
+                    colors=colors,
+                    resolutions=resolutions,
+                    seed=seed,
+                )
+
+                if append_results and self.wallpapers:
+                    self.wallpapers = self.wallpapers + wallpapers
+                else:
+                    self.wallpapers = wallpapers
+
+                self.current_page = meta.get("current_page", page)
+                self.total_pages = meta.get("last_page", page + 1)
+                self.total_wallpapers = meta.get("total", 0)
+
+                logger.debug(
+                    f"Search completed: {len(wallpapers)} wallpapers, page {self.current_page}/{self.total_pages}"
+                )
+
+            except (ClientError, ValueError, OSError, Exception) as e:
+                error_msg = f"Failed to search wallpapers: {e}"
+                self.error_message = error_msg
+                self.wallpapers = []
+                logger.error(error_msg, exc_info=True)
+            finally:
+                self.is_busy = False
 
     async def load_next_page(self) -> None:
         """Load next page of wallpapers"""
@@ -255,7 +297,7 @@ class WallhavenViewModel(BaseViewModel):
                 colors=self.colors,
                 resolutions=self.resolutions,
                 seed=self.seed,
-                append_results=True,
+                append_results=False,
             )
 
     async def load_prev_page(self) -> None:
@@ -275,7 +317,7 @@ class WallhavenViewModel(BaseViewModel):
                 colors=self.colors,
                 resolutions=self.resolutions,
                 seed=self.seed,
-                append_results=True,
+                append_results=False,
             )
 
     def has_next_page(self) -> bool:
@@ -322,32 +364,70 @@ class WallhavenViewModel(BaseViewModel):
         finally:
             self.is_busy = False
 
-    async def add_to_favorites(self, wallpaper: Wallpaper) -> bool:
+    async def add_to_favorites_async(self, wallpaper: Wallpaper) -> tuple[bool, str]:
+        """Add wallpaper to favorites. Returns (success, message) tuple."""
         if not self.favorites_service:
             self.error_message = "Favorites service not available"
-            return False
+            return False, "Favorites service not available"
 
+        async with self._add_to_favorites_lock:
+            try:
+                self.is_busy = True
+                self.error_message = None
+
+                if self.favorites_service.is_favorite(wallpaper.id):
+                    return False, "Already in favorites"
+
+                self.favorites_service.add_favorite(wallpaper)
+                return True, "Added to favorites"
+
+            except (ValueError, OSError) as e:
+                self.error_message = f"Failed to add to favorites: {e}"
+                return False, f"Failed to add to favorites: {e}"
+            finally:
+                self.is_busy = False
+
+    async def set_wallpaper_async(self, wallpaper: Wallpaper) -> tuple[bool, str]:
+        """Set wallpaper as desktop background. Returns (success, message) tuple."""
         try:
             self.is_busy = True
             self.error_message = None
 
-            if self.favorites_service.is_favorite(wallpaper.id):
-                if self.notification_service:
-                    self.notification_service.notify_warning("Already in favorites")
-                return False
+            local_path = await self.download_wallpaper(wallpaper)
+            if not local_path:
+                return False, "Failed to download wallpaper"
 
-            self.favorites_service.add_favorite(wallpaper)
-
-            if self.notification_service:
-                self.notification_service.notify_success("Added to favorites")
-
-            return True
+            success = self.wallpaper_setter.set_wallpaper(local_path)
+            if success:
+                return True, "Wallpaper set successfully"
+            else:
+                return False, "Failed to set wallpaper"
 
         except (ValueError, OSError) as e:
-            self.error_message = f"Failed to add to favorites: {e}"
-            if self.notification_service:
-                self.notification_service.notify_error(f"Failed to add to favorites: {e}")
-            return False
+            self.error_message = f"Failed to set wallpaper: {e}"
+            return False, f"Failed to set wallpaper: {e}"
+        finally:
+            self.is_busy = False
+
+    async def download_wallpaper_async(
+        self, wallpaper: Wallpaper
+    ) -> tuple[str | None, str]:
+        """Download wallpaper and return (path, message) tuple."""
+        try:
+            self.is_busy = True
+            self.error_message = None
+
+            path = await self.download_wallpaper(wallpaper)
+            if path:
+                # Emit signal that download completed successfully
+                self.emit("wallpaper-downloaded", path)
+                return path, "Downloaded successfully"
+            else:
+                return None, "Failed to download wallpaper"
+
+        except (ValueError, OSError, ClientError) as e:
+            self.error_message = f"Download error: {e}"
+            return None, f"Download error: {e}"
         finally:
             self.is_busy = False
 
@@ -361,17 +441,19 @@ class WallhavenViewModel(BaseViewModel):
         try:
             self.is_busy = True
 
-            filename = f"{wallpaper.id}.{wallpaper.url.rsplit('.', 1)[-1]}"
+            filename = f"{wallpaper.id}.{wallpaper.path.rsplit('.', 1)[-1]}"
             dest_path = config.local_wallpapers_dir / filename
+
+            # Check if already downloaded
+            if dest_path.exists():
+                logger.info(f"Wallpaper {wallpaper.id} already exists at {dest_path}")
+                return str(dest_path)
 
             success = await self.wallhaven_service.download(wallpaper, dest_path)
 
             if success:
-                wallpaper.path = str(dest_path)
-                self.wallpapers = self.wallpapers.copy()
-                index = self.wallpapers.index(wallpaper)
-                self.wallpapers[index] = wallpaper
-                self.notify("wallpapers")
+                # DO NOT mutate wallpaper.path - it contains the download URL!
+                # The local path is returned directly to the caller
                 return str(dest_path)
             else:
                 self.error_message = f"Failed to download wallpaper {wallpaper.id}"

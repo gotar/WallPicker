@@ -2,6 +2,7 @@
 ViewModel for local wallpaper browsing
 """
 
+import hashlib
 import sys
 from pathlib import Path
 
@@ -29,15 +30,13 @@ class LocalViewModel(BaseViewModel):
         pictures_dir: Path | None = None,
         favorites_service: FavoritesService | None = None,
         config_service=None,
-        thumbnail_cache=None,
     ) -> None:
-        super().__init__(thumbnail_cache=thumbnail_cache)
+        super().__init__()
         self.local_service = local_service
         self.wallpaper_setter = wallpaper_setter
         self.pictures_dir = pictures_dir
         self.favorites_service = favorites_service
         self.config_service = config_service
-        self.notification_service = None
 
         self._wallpapers: list[LocalWallpaper] = []
         self.search_query = ""
@@ -89,19 +88,21 @@ class LocalViewModel(BaseViewModel):
         finally:
             self.is_busy = False
 
-    def set_wallpaper(self, wallpaper: LocalWallpaper) -> bool:
+    def set_wallpaper(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         try:
             self.is_busy = True
             self.error_message = None
             result = self.wallpaper_setter.set_wallpaper(str(wallpaper.path))
-            return result
+            if result:
+                return True, "Wallpaper set successfully"
+            return False, "Failed to set wallpaper"
         except Exception as e:
             self.error_message = str(e)
-            return False
+            return False, str(e)
         finally:
             self.is_busy = False
 
-    def delete_wallpaper(self, wallpaper: LocalWallpaper) -> bool:
+    def delete_wallpaper(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         try:
             self.is_busy = True
             self.error_message = None
@@ -112,16 +113,13 @@ class LocalViewModel(BaseViewModel):
                 if wallpaper in self._wallpapers:
                     self._wallpapers.remove(wallpaper)
                     self.notify("wallpapers")
-                if self.notification_service:
-                    self.notification_service.notify_success(f"Deleted '{wallpaper.filename}'")
+                return True, f"Deleted '{wallpaper.filename}'"
 
-            return result
+            return False, "Failed to delete"
 
         except Exception as e:
             self.error_message = f"Failed to delete wallpaper: {e}"
-            if self.notification_service:
-                self.notification_service.notify_error(f"Failed to delete: {e}")
-            return False
+            return False, str(e)
         finally:
             self.is_busy = False
 
@@ -152,20 +150,23 @@ class LocalViewModel(BaseViewModel):
         self._selected_wallpapers_list = self.wallpapers.copy()
         self._update_selection_state()
 
-    def add_to_favorites(self, wallpaper: LocalWallpaper) -> bool:
+    def add_to_favorites(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
+        if self.is_busy:
+            return False, "Operation in progress"
+
         if not self.favorites_service:
             self.error_message = "Favorites service not available"
-            return False
+            return False, "Favorites service not available"
 
         try:
             self.is_busy = True
             self.error_message = None
 
-            wallpaper_id = f"local_{hash(wallpaper.path)}"
+            # Use hashlib for deterministic hash (Python's hash() is not stable across sessions)
+            path_hash = hashlib.sha256(str(wallpaper.path).encode()).hexdigest()[:16]
+            wallpaper_id = f"local_{path_hash}"
             if self.favorites_service.is_favorite(wallpaper_id):
-                if self.notification_service:
-                    self.notification_service.notify_warning("Already in favorites")
-                return False
+                return False, "Already in favorites"
 
             from PIL import Image
 
@@ -175,8 +176,13 @@ class LocalViewModel(BaseViewModel):
             try:
                 with Image.open(wallpaper.path) as img:
                     width, height = img.size
-            except Exception:
-                pass
+            except (OSError, ValueError) as e:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.debug(
+                    f"Could not read image dimensions from {wallpaper.path}: {e}"
+                )
 
             wallpaper_domain = Wallpaper(
                 id=wallpaper_id,
@@ -189,18 +195,10 @@ class LocalViewModel(BaseViewModel):
             )
 
             self.favorites_service.add_favorite(wallpaper_domain)
-
-            if self.notification_service:
-                self.notification_service.notify_success(
-                    f"Added '{wallpaper.filename}' to favorites"
-                )
-
-            return True
+            return True, f"Added '{wallpaper.filename}' to favorites"
 
         except Exception as e:
             self.error_message = f"Failed to add to favorites: {e}"
-            if self.notification_service:
-                self.notification_service.notify_error(f"Failed to add to favorites: {e}")
-            return False
+            return False, str(e)
         finally:
             self.is_busy = False

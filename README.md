@@ -8,12 +8,15 @@ A modern GTK4/Libadwaita wallpaper picker application. Browse and discover wallp
 
 ## Features
 
-- **Wallhaven Integration**: Search, filter, and browse thousands of wallpapers from Wallhaven.cc with support for categories, purity levels, and sorting options
- - **Local Wallpaper Management**: Browse and manage wallpapers from your `~/Pictures` directory (or custom directory) with thumbnail previews
-- **Favorites System**: Save your favorite wallpapers for quick access across sessions
+- **Wallhaven Integration**: Search, filter, and browse thousands of wallpapers from Wallhaven.cc with support for categories, purity levels, and sorting options. Shows total wallpaper count for searches.
+  - **Local Wallpaper Management**: Browse and manage wallpapers from your `~/Pictures` directory (or custom directory) with thumbnail previews. Auto-refreshes when downloading from Wallhaven.
+- **Favorites System**: Save your favorite wallpapers for quick access across sessions. Supports both local and remote wallpapers with automatic downloading.
 - **Smart Thumbnail Caching**: Persistent disk-based caching for instant thumbnail loading with automatic cleanup
 - **Smooth Transitions**: Animated wallpaper changes using `awww` utility
-- **Modern UI**: Native GTK4/Libadwaita interface that integrates seamlessly with your desktop environment
+- **Modern UI**: Native GTK4/Libadwaita interface with Adw.ToolbarView, Adw.ToastOverlay, Adw.StatusPage, and responsive grid layouts
+- **MVVM Architecture**: Clean separation of concerns with proper ViewModels, Views, and Services
+- **Async Operations**: All I/O operations use async/await for non-blocking UI
+- **Dependency Injection**: Service container for flexible dependency management
 
 ## Screenshots
 

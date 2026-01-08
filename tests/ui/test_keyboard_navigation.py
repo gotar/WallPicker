@@ -5,8 +5,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import pytest
-
 
 def test_main_window_has_keyboard_navigation():
     """Test main window has keyboard navigation methods."""
@@ -82,11 +80,13 @@ def test_shortcuts_dialog_component_exists():
 def test_cards_are_made_focusable():
     """Test that cards are made focusable in views."""
     # Check local_view.py contains focusability setup
-    local_view_path = Path(__file__).parent.parent.parent / "src" / "ui" / "views" / "local_view.py"
+    local_view_path = (
+        Path(__file__).parent.parent.parent / "src" / "ui" / "views" / "local_view.py"
+    )
 
     assert local_view_path.exists()
 
-    with open(local_view_path, "r") as f:
+    with open(local_view_path) as f:
         content = f.read()
 
     # Verify cards are made focusable
@@ -101,22 +101,27 @@ def test_css_focus_styles_exist():
 
     assert css_path.exists()
 
-    with open(css_path, "r") as f:
+    with open(css_path) as f:
         css_content = f.read()
 
     # Check for focus indicators
     assert ":focus-visible" in css_content or "*:focus" in css_content
-    assert ".wallpaper-card:focus" in css_content or ".wallpaper-card:focus-visible" in css_content
+    assert (
+        ".wallpaper-card:focus" in css_content
+        or ".wallpaper-card:focus-visible" in css_content
+    )
     # Check for shortcuts dialog styling
-    assert ".shortcuts-dialog" in css_content or "SHORTCUTS DIALOG" in css_content.upper()
+    assert (
+        ".shortcuts-dialog" in css_content or "SHORTCUTS DIALOG" in css_content.upper()
+    )
     # Check for focus animations
     assert "focus" in css_content.lower()
 
 
 def test_all_views_support_ctrl_a():
     """Test all views support Ctrl+A to select all."""
-    from ui.views.local_view import LocalView
     from ui.views.favorites_view import FavoritesView
+    from ui.views.local_view import LocalView
     from ui.views.wallhaven_view import WallhavenView
 
     # Verify all views handle Ctrl+A
@@ -127,8 +132,8 @@ def test_all_views_support_ctrl_a():
 
 def test_all_views_support_escape():
     """Test all views support Escape to clear selection."""
-    from ui.views.local_view import LocalView
     from ui.views.favorites_view import FavoritesView
+    from ui.views.local_view import LocalView
     from ui.views.wallhaven_view import WallhavenView
 
     # Verify all views handle Escape
@@ -148,11 +153,12 @@ def test_menu_integration():
 
 def test_gtk_event_controller_imports():
     """Test EventControllerKey is imported correctly."""
-    from ui.views.local_view import LocalView
 
-    local_view_path = Path(__file__).parent.parent.parent / "src" / "ui" / "views" / "local_view.py"
+    local_view_path = (
+        Path(__file__).parent.parent.parent / "src" / "ui" / "views" / "local_view.py"
+    )
 
-    with open(local_view_path, "r") as f:
+    with open(local_view_path) as f:
         content = f.read()
 
     # Verify EventControllerKey is imported
@@ -164,15 +170,18 @@ def test_gtk_event_controller_imports():
 
 def test_shortcuts_dialog_structure():
     """Test shortcuts dialog has proper structure."""
-    from ui.components.shortcuts_dialog import ShortcutsDialog
 
     shortcuts_dialog_path = (
-        Path(__file__).parent.parent.parent / "src" / "ui" / "components" / "shortcuts_dialog.py"
+        Path(__file__).parent.parent.parent
+        / "src"
+        / "ui"
+        / "components"
+        / "shortcuts_dialog.py"
     )
 
     assert shortcuts_dialog_path.exists()
 
-    with open(shortcuts_dialog_path, "r") as f:
+    with open(shortcuts_dialog_path) as f:
         content = f.read()
 
     # Verify dialog structure

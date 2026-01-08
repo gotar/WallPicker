@@ -96,13 +96,19 @@ class TestFilterOrientation:
     def test_filter_orientation_changes_at_900px(self, test_view_with_filter):
         """Test that filter bar stacks at 900px."""
         assert test_view_with_filter.filter_bar is not None
-        assert test_view_with_filter.filter_bar.get_orientation() == Gtk.Orientation.HORIZONTAL
+        assert (
+            test_view_with_filter.filter_bar.get_orientation()
+            == Gtk.Orientation.HORIZONTAL
+        )
 
         # Simulate narrow breakpoint application
         test_view_with_filter.filter_bar.set_orientation(Gtk.Orientation.VERTICAL)
         test_view_with_filter.filter_bar.add_css_class("vertical")
 
-        assert test_view_with_filter.filter_bar.get_orientation() == Gtk.Orientation.VERTICAL
+        assert (
+            test_view_with_filter.filter_bar.get_orientation()
+            == Gtk.Orientation.VERTICAL
+        )
         assert test_view_with_filter.filter_bar.has_css_class("vertical")
 
     def test_filter_orientation_reverts_to_horizontal(self, test_view_with_filter):
@@ -112,13 +118,19 @@ class TestFilterOrientation:
         # Simulate narrow state
         test_view_with_filter.filter_bar.set_orientation(Gtk.Orientation.VERTICAL)
         test_view_with_filter.filter_bar.add_css_class("vertical")
-        assert test_view_with_filter.filter_bar.get_orientation() == Gtk.Orientation.VERTICAL
+        assert (
+            test_view_with_filter.filter_bar.get_orientation()
+            == Gtk.Orientation.VERTICAL
+        )
 
         # Simulate wide breakpoint unapplication
         test_view_with_filter.filter_bar.set_orientation(Gtk.Orientation.HORIZONTAL)
         test_view_with_filter.filter_bar.remove_css_class("vertical")
 
-        assert test_view_with_filter.filter_bar.get_orientation() == Gtk.Orientation.HORIZONTAL
+        assert (
+            test_view_with_filter.filter_bar.get_orientation()
+            == Gtk.Orientation.HORIZONTAL
+        )
         assert not test_view_with_filter.filter_bar.has_css_class("vertical")
 
 
@@ -161,7 +173,7 @@ class TestAdaptiveLayoutIntegration:
             (1600, 6),
         ]
 
-        for width, expected_columns in breakpoint_sequence:
+        for _width, expected_columns in breakpoint_sequence:
             test_view.flow_box.set_max_children_per_line(expected_columns)
             assert test_view.flow_box.get_max_children_per_line() == expected_columns
 
@@ -175,14 +187,20 @@ class TestAdaptiveLayoutIntegration:
         test_view_with_filter.filter_bar.set_orientation(Gtk.Orientation.VERTICAL)
 
         assert test_view.flow_box.get_max_children_per_line() == 2
-        assert test_view_with_filter.filter_bar.get_orientation() == Gtk.Orientation.VERTICAL
+        assert (
+            test_view_with_filter.filter_bar.get_orientation()
+            == Gtk.Orientation.VERTICAL
+        )
 
         # Simulate wide breakpoint
         test_view.flow_box.set_max_children_per_line(4)
         test_view_with_filter.filter_bar.set_orientation(Gtk.Orientation.HORIZONTAL)
 
         assert test_view.flow_box.get_max_children_per_line() == 4
-        assert test_view_with_filter.filter_bar.get_orientation() == Gtk.Orientation.HORIZONTAL
+        assert (
+            test_view_with_filter.filter_bar.get_orientation()
+            == Gtk.Orientation.HORIZONTAL
+        )
 
 
 @pytest.fixture
@@ -233,14 +251,18 @@ class TestCSSMediaQueries:
         """Test that CSS file exists."""
         import os
 
-        css_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "style.css")
+        css_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "data", "style.css"
+        )
         assert os.path.exists(css_path)
 
     def test_wallpaper_card_css_exists(self):
         """Test that wallpaper card styling exists."""
         import os
 
-        css_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "style.css")
+        css_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "data", "style.css"
+        )
         with open(css_path) as f:
             css_content = f.read()
             assert ".wallpaper-card" in css_content
@@ -249,7 +271,9 @@ class TestCSSMediaQueries:
         """Test that action button styling exists."""
         import os
 
-        css_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "style.css")
+        css_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "data", "style.css"
+        )
         with open(css_path) as f:
             css_content = f.read()
             assert ".action-button" in css_content
@@ -259,16 +283,23 @@ class TestCSSMediaQueries:
         """Test that view switcher bar styling exists."""
         import os
 
-        css_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "style.css")
+        css_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "data", "style.css"
+        )
         with open(css_path) as f:
             css_content = f.read()
-            assert ".view-switcher-bar" in css_content or "viewswitcherbar" in css_content.lower()
+            assert (
+                ".view-switcher-bar" in css_content
+                or "viewswitcherbar" in css_content.lower()
+            )
 
     def test_filter_bar_css_exists(self):
         """Test that filter bar styling exists."""
         import os
 
-        css_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "style.css")
+        css_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "data", "style.css"
+        )
         with open(css_path) as f:
             css_content = f.read()
             assert ".filter-bar" in css_content or "filterbar" in css_content.lower()
@@ -277,7 +308,9 @@ class TestCSSMediaQueries:
         """Test that focus styles are defined."""
         import os
 
-        css_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "style.css")
+        css_path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "data", "style.css"
+        )
         with open(css_path) as f:
             css_content = f.read()
             assert ":focus" in css_content

@@ -50,7 +50,9 @@ def test_add_favorite(favorites_service: FavoritesService, sample_wallpaper: Wal
     assert favorites[0].wallpaper_id == sample_wallpaper.id
 
 
-def test_add_duplicate_favorite(favorites_service: FavoritesService, sample_wallpaper: Wallpaper):
+def test_add_duplicate_favorite(
+    favorites_service: FavoritesService, sample_wallpaper: Wallpaper
+):
     """Test adding duplicate favorite."""
     favorites_service.add_favorite(sample_wallpaper)
     favorites_service.add_favorite(sample_wallpaper)
@@ -59,7 +61,9 @@ def test_add_duplicate_favorite(favorites_service: FavoritesService, sample_wall
     assert len(favorites) == 1  # Should not duplicate
 
 
-def test_remove_favorite(favorites_service: FavoritesService, sample_wallpaper: Wallpaper):
+def test_remove_favorite(
+    favorites_service: FavoritesService, sample_wallpaper: Wallpaper
+):
     """Test removing favorite."""
     favorites_service.add_favorite(sample_wallpaper)
 
@@ -83,7 +87,9 @@ def test_is_favorite(favorites_service: FavoritesService, sample_wallpaper: Wall
     assert favorites_service.is_favorite(sample_wallpaper.id)
 
 
-def test_get_favorites(favorites_service: FavoritesService, sample_wallpaper: Wallpaper):
+def test_get_favorites(
+    favorites_service: FavoritesService, sample_wallpaper: Wallpaper
+):
     """Test getting all favorites."""
     # Add multiple favorites
     for i in range(3):
@@ -118,7 +124,9 @@ def test_search_favorites_no_query(
     assert len(results) == 1
 
 
-def test_search_favorites_by_id(favorites_service: FavoritesService, sample_wallpaper: Wallpaper):
+def test_search_favorites_by_id(
+    favorites_service: FavoritesService, sample_wallpaper: Wallpaper
+):
     """Test searching favorites by ID."""
     favorites_service.add_favorite(sample_wallpaper)
 
@@ -147,7 +155,9 @@ def test_search_favorites_no_match(
     assert len(results) == 0
 
 
-def test_favorite_persistence(favorites_service: FavoritesService, sample_wallpaper: Wallpaper):
+def test_favorite_persistence(
+    favorites_service: FavoritesService, sample_wallpaper: Wallpaper
+):
     """Test favorites persist across service instances."""
     # Add favorite
     favorites_service.add_favorite(sample_wallpaper)
@@ -160,7 +170,9 @@ def test_favorite_persistence(favorites_service: FavoritesService, sample_wallpa
     assert favorites[0].wallpaper.id == sample_wallpaper.id
 
 
-def test_favorite_serialization(favorites_service: FavoritesService, sample_wallpaper: Wallpaper):
+def test_favorite_serialization(
+    favorites_service: FavoritesService, sample_wallpaper: Wallpaper
+):
     """Test favorite JSON serialization."""
     favorites_service.add_favorite(sample_wallpaper)
 
@@ -173,7 +185,9 @@ def test_favorite_serialization(favorites_service: FavoritesService, sample_wall
     assert "added_at" in data[0]
 
 
-def test_days_since_added(favorites_service: FavoritesService, sample_wallpaper: Wallpaper):
+def test_days_since_added(
+    favorites_service: FavoritesService, sample_wallpaper: Wallpaper
+):
     """Test days since favorite was added."""
     favorites_service.add_favorite(sample_wallpaper)
 

@@ -10,10 +10,10 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gdk, GObject, Gtk, Pango  # noqa: E402
+from gi.repository import Adw, Gdk, GLib, GObject, Gtk, Pango  # noqa: E402
 
-from ui.components.search_filter_bar import SearchFilterBar
-from ui.view_models.local_view_model import LocalViewModel
+from ui.components.search_filter_bar import SearchFilterBar  # noqa: E402
+from ui.view_models.local_view_model import LocalViewModel  # noqa: E402
 
 
 class LocalView(Adw.BreakpointBin):
@@ -23,15 +23,20 @@ class LocalView(Adw.BreakpointBin):
         self,
         view_model: LocalViewModel,
         banner_service=None,
+        toast_service=None,
+        thumbnail_loader=None,
         on_set_wallpaper=None,
         on_delete=None,
     ):
         super().__init__()
         self.view_model = view_model
         self.banner_service = banner_service
+        self.toast_service = toast_service
+        self.thumbnail_loader = thumbnail_loader
         self.on_set_wallpaper = on_set_wallpaper
         self.on_delete = on_delete
         self._last_selected_wallpaper = None
+        self._search_debounce_timer = None
 
         self._create_ui()
 
@@ -53,7 +58,9 @@ class LocalView(Adw.BreakpointBin):
         toolbar_wrapper.add_css_class("toolbar-wrapper")
         self.main_box.append(toolbar_wrapper)
 
-        folder_btn = Gtk.Button(icon_name="folder-symbolic", tooltip_text="Choose folder")
+        folder_btn = Gtk.Button(
+            icon_name="folder-symbolic", tooltip_text="Choose folder"
+        )
         folder_btn.connect("clicked", self._on_folder_clicked)
         toolbar_wrapper.append(folder_btn)
 
@@ -68,7 +75,18 @@ class LocalView(Adw.BreakpointBin):
         toolbar_wrapper.append(self.loading_spinner)
 
     def _on_search_changed(self, text: str):
+        if self._search_debounce_timer:
+            GLib.source_remove(self._search_debounce_timer)
+
         self.view_model.search_query = text
+        self._search_debounce_timer = GLib.timeout_add(300, self._trigger_search)
+
+    def _trigger_search(self) -> bool:
+        if self._search_debounce_timer:
+            self._search_debounce_timer = None
+
+        self.view_model.search_wallpapers(self.view_model.search_query)
+        return False  # Don't repeat timer
 
     def _on_sort_changed(self, sorting: str):
         if sorting == "name":
@@ -87,7 +105,7 @@ class LocalView(Adw.BreakpointBin):
         # Create flow box for wallpaper grid
         self.wallpaper_grid = Gtk.FlowBox()
         self.wallpaper_grid.set_homogeneous(True)
-        self.wallpaper_grid.set_min_children_per_line(2)
+        self.wallpaper_grid.set_min_children_per_line(4)
         self.wallpaper_grid.set_max_children_per_line(12)
         self.wallpaper_grid.set_column_spacing(12)
         self.wallpaper_grid.set_row_spacing(12)
@@ -264,7 +282,9 @@ class LocalView(Adw.BreakpointBin):
     def _on_set_all_selected(self):
         selected = self.view_model.get_selected_wallpapers()
         for wallpaper in selected:
-            self.view_model.wallpaper_setter.set_wallpaper(str(wallpaper.path))
+            success, message = self.view_model.set_wallpaper(wallpaper)
+            if success and self.toast_service:
+                self.toast_service.show_success(message)
             break
         self.view_model.clear_selection()
 
@@ -279,8 +299,11 @@ class LocalView(Adw.BreakpointBin):
                 if folder:
                     path = Path(folder.get_path())
                     self.view_model.set_pictures_dir(path)
-            except Exception:
-                pass
+            except (RuntimeError, TypeError) as e:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Could not get folder path from dialog: {e}")
 
         dialog.select_folder(window, None, on_folder_selected)
 
@@ -291,15 +314,20 @@ class LocalView(Adw.BreakpointBin):
 
     def update_wallpaper_grid(self, wallpapers):
         """Update wallpaper grid with new wallpapers"""
-        while child := self.wallpaper_grid.get_first_child():
-            self.wallpaper_grid.remove(child)
 
-        # Clear card->wallpaper mapping
-        self.card_wallpaper_map.clear()
+        def clear_and_update():
+            while child := self.wallpaper_grid.get_first_child():
+                self.wallpaper_grid.remove(child)
 
-        for wallpaper in wallpapers:
-            card = self._create_wallpaper_card(wallpaper)
-            self.wallpaper_grid.append(card)
+            self.card_wallpaper_map.clear()
+
+            for wallpaper in wallpapers:
+                card = self._create_wallpaper_card(wallpaper)
+                self.wallpaper_grid.append(card)
+
+            return False
+
+        GLib.idle_add(clear_and_update)
 
     def _create_wallpaper_card(self, wallpaper):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -334,7 +362,8 @@ class LocalView(Adw.BreakpointBin):
                 image.set_paintable(texture)
 
         thumb_path = str(wallpaper.path)
-        self.view_model.load_thumbnail_async(thumb_path, on_thumbnail_loaded)
+        if self.thumbnail_loader:
+            self.thumbnail_loader.load_thumbnail_async(thumb_path, on_thumbnail_loaded)
 
         card.append(image)
 
@@ -346,8 +375,8 @@ class LocalView(Adw.BreakpointBin):
         filename_label = Gtk.Label()
         filename_label.set_ellipsize(Pango.EllipsizeMode.END)
         filename_label.set_lines(1)
-        filename_label.set_max_width_chars(20)
-        filename_label.set_xalign(0)
+        filename_label.set_max_width_chars(35)
+        filename_label.set_halign(Gtk.Align.CENTER)
         filename_label.set_text(wallpaper.filename)
         filename_label.add_css_class("filename-label")
         info_box.append(filename_label)
@@ -380,14 +409,18 @@ class LocalView(Adw.BreakpointBin):
         actions_box.add_css_class("card-actions-box")
         actions_box.set_halign(Gtk.Align.CENTER)
 
-        set_btn = Gtk.Button(icon_name="image-x-generic-symbolic", tooltip_text="Set as wallpaper")
+        set_btn = Gtk.Button(
+            icon_name="image-x-generic-symbolic", tooltip_text="Set as wallpaper"
+        )
         set_btn.add_css_class("action-button")
         set_btn.add_css_class("suggested-action")
         set_btn.set_cursor_from_name("pointer")
         set_btn.connect("clicked", self._on_set_wallpaper, wallpaper)
         actions_box.append(set_btn)
 
-        fav_btn = Gtk.Button(icon_name="starred-symbolic", tooltip_text="Add to favorites")
+        fav_btn = Gtk.Button(
+            icon_name="starred-symbolic", tooltip_text="Add to favorites"
+        )
         fav_btn.add_css_class("action-button")
         fav_btn.add_css_class("favorite-action")
         fav_btn.set_cursor_from_name("pointer")
@@ -412,16 +445,24 @@ class LocalView(Adw.BreakpointBin):
         self.view_model.toggle_selection(wallpaper)
 
     def _on_set_wallpaper(self, button, wallpaper):
-        result = self.view_model.wallpaper_setter.set_wallpaper(str(wallpaper.path))
-        if not result:
-            self.error_message = "Failed to set wallpaper"
+        success, message = self.view_model.set_wallpaper(wallpaper)
+        if success:
+            if self.toast_service:
+                self.toast_service.show_success(message)
+        else:
+            if self.toast_service:
+                self.toast_service.show_error(message)
 
     def _on_add_to_favorites(self, button, wallpaper):
-        self.view_model.add_to_favorites(wallpaper)
+        success, message = self.view_model.add_to_favorites(wallpaper)
+        if success:
+            if self.toast_service:
+                self.toast_service.show_success(message)
+        else:
+            if self.toast_service:
+                self.toast_service.show_error(message)
 
     def _on_delete_wallpaper(self, button, wallpaper):
-        """Handle delete button click"""
-        # Get the top-level window
         window = self.get_root()
 
         dialog = Adw.MessageDialog(
@@ -437,9 +478,14 @@ class LocalView(Adw.BreakpointBin):
 
         def on_response(dialog, response):
             if response == "delete":
-                result = self.view_model.delete_wallpaper(wallpaper)
-                if result:
+                success, message = self.view_model.delete_wallpaper(wallpaper)
+                if success:
+                    if self.toast_service:
+                        self.toast_service.show_success(message)
                     self.update_status(len(self.view_model.wallpapers))
+                else:
+                    if self.toast_service:
+                        self.toast_service.show_error(message)
 
         dialog.connect("response", on_response)
         dialog.present()

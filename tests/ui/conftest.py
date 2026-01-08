@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -53,9 +53,9 @@ def mock_favorites_service(tmp_path):
     """Mock FavoritesService for ViewModel tests."""
     from datetime import datetime
 
-    from services.favorites_service import FavoritesService
     from domain.favorite import Favorite
-    from domain.wallpaper import Wallpaper, Resolution, WallpaperSource, WallpaperPurity
+    from domain.wallpaper import Resolution, Wallpaper, WallpaperPurity, WallpaperSource
+    from services.favorites_service import FavoritesService
 
     mock = MagicMock(spec=FavoritesService)
 
@@ -96,8 +96,8 @@ def mock_favorites_service(tmp_path):
 @pytest.fixture
 def mock_wallhaven_service():
     """Mock WallhavenService for ViewModel tests."""
+    from domain.wallpaper import Resolution, Wallpaper, WallpaperPurity, WallpaperSource
     from services.wallhaven_service import WallhavenService
-    from domain.wallpaper import Wallpaper, Resolution, WallpaperSource, WallpaperPurity
 
     mock = MagicMock(spec=WallhavenService)
 
@@ -163,6 +163,7 @@ def favorites_view_model(mock_favorites_service, mock_wallpaper_setter):
 def mock_config_service():
     """Mock ConfigService for testing."""
     from pathlib import Path
+
     from domain.config import Config
 
     mock_service = MagicMock()
@@ -172,14 +173,14 @@ def mock_config_service():
 
 
 @pytest.fixture
-def wallhaven_view_model(mock_wallhaven_service, mock_thumbnail_cache, mock_config_service):
+def wallhaven_view_model(mock_wallhaven_service, mock_config_service):
     """Create WallhavenViewModel with mocked services."""
-    from ui.view_models.wallhaven_view_model import WallhavenViewModel
     from unittest.mock import MagicMock
+
+    from ui.view_models.wallhaven_view_model import WallhavenViewModel
 
     return WallhavenViewModel(
         wallhaven_service=mock_wallhaven_service,
-        thumbnail_cache=mock_thumbnail_cache,
         wallpaper_setter=MagicMock(),
         config_service=mock_config_service,
     )

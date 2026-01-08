@@ -1,7 +1,5 @@
 """Tests for BaseService."""
 
-import pytest
-
 from services.base import BaseService
 
 

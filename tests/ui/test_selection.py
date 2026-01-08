@@ -23,7 +23,9 @@ class TestSelection:
         assert wallpaper in selected
         assert local_view_model.selected_count == 1
 
-    def test_toggle_selection_removes_from_selected_list(self, local_view_model, tmp_path):
+    def test_toggle_selection_removes_from_selected_list(
+        self, local_view_model, tmp_path
+    ):
         """Test toggling selection removes wallpaper from selected list."""
         from services.local_service import LocalWallpaper
 
@@ -41,7 +43,9 @@ class TestSelection:
         assert wallpaper not in selected
         assert local_view_model.selected_count == 0
 
-    def test_select_all_selects_all_wallpapers(self, local_view_model, mock_local_service):
+    def test_select_all_selects_all_wallpapers(
+        self, local_view_model, mock_local_service
+    ):
         """Test select all selects all wallpapers."""
         local_view_model.load_wallpapers()
 
@@ -62,7 +66,9 @@ class TestSelection:
         assert len(selected) == 0
         assert local_view_model.selected_count == 0
 
-    def test_clear_selection_exits_selection_mode(self, local_view_model, mock_local_service):
+    def test_clear_selection_exits_selection_mode(
+        self, local_view_model, mock_local_service
+    ):
         """Test clear selection deselects and exits selection mode."""
         local_view_model.load_wallpapers()
         local_view_model.select_all()
@@ -91,7 +97,9 @@ class TestSelection:
 
         assert local_view_model.selected_count == 3
 
-    def test_selected_wallpapers_property_returns_list(self, local_view_model, tmp_path):
+    def test_selected_wallpapers_property_returns_list(
+        self, local_view_model, tmp_path
+    ):
         """Test selected_wallpapers property returns list of selected wallpapers."""
         from services.local_service import LocalWallpaper
 

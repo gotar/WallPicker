@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import aiohttp
+import requests
 
 from domain.exceptions import ServiceError
 from services.base import BaseService
@@ -60,7 +61,9 @@ class ThumbnailCache(BaseService):
                         cache_file.unlink()
                         removed_count += 1
                     except OSError:
-                        self.log_warning(f"Failed to delete expired cache: {cache_file}")
+                        self.log_warning(
+                            f"Failed to delete expired cache: {cache_file}"
+                        )
 
         # Remove oldest files if still over limit
         files = sorted(self.cache_dir.glob("*"), key=lambda f: f.stat().st_mtime)
@@ -97,7 +100,9 @@ class ThumbnailCache(BaseService):
         self.log_debug(f"Cache hit: {url[:50]}...")
         return cache_path
 
-    async def download_and_cache(self, url: str, session: aiohttp.ClientSession) -> Path:
+    async def download_and_cache(
+        self, url: str, session: aiohttp.ClientSession
+    ) -> Path:
         """Download thumbnail from URL and cache it.
 
         Args:
@@ -126,7 +131,9 @@ class ThumbnailCache(BaseService):
             self.log_debug(f"Cached thumbnail: {cache_path.name}")
             return cache_path
         except (aiohttp.ClientError, OSError) as e:
-            self.log_error(f"Failed to download thumbnail from {url}: {e}", exc_info=True)
+            self.log_error(
+                f"Failed to download thumbnail from {url}: {e}", exc_info=True
+            )
             raise ServiceError(f"Failed to download thumbnail: {e}") from e
 
     async def get_or_download(self, url: str, session: aiohttp.ClientSession) -> Path:
@@ -148,3 +155,58 @@ class ThumbnailCache(BaseService):
             return cached
 
         return await self.download_and_cache(url, session)
+
+    def get_or_download_sync(self, url: str) -> Path:
+        """Synchronous version for use in thread pools.
+
+        Args:
+            url: Thumbnail URL or local file path
+
+        Returns:
+            Path to file (cached thumbnail for URLs, original path for local files)
+
+        Raises:
+            ServiceError: If download fails
+        """
+        path = Path(url)
+        if path.exists() and path.is_file():
+            return path
+
+        cached = self.get_thumbnail(url)
+        if cached:
+            return cached
+
+        return self._download_and_cache_sync(url)
+
+    def _download_and_cache_sync(self, url: str) -> Path:
+        """Download thumbnail synchronously and cache it.
+
+        Args:
+            url: Thumbnail URL to download
+
+        Returns:
+            Path to cached file
+
+        Raises:
+            ServiceError: If download fails
+        """
+        cache_path = self._get_cache_path(url)
+
+        try:
+            self.cleanup()
+            self.log_info(f"Downloading thumbnail: {url[:50]}...")
+
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            image_data = response.content
+
+            with open(cache_path, "wb") as f:
+                f.write(image_data)
+
+            self.log_debug(f"Cached thumbnail: {cache_path.name}")
+            return cache_path
+        except (requests.RequestException, OSError) as e:
+            self.log_error(
+                f"Failed to download thumbnail from {url}: {e}", exc_info=True
+            )
+            raise ServiceError(f"Failed to download thumbnail: {e}") from e

@@ -1,7 +1,5 @@
 """Tests for NotificationService."""
 
-from pathlib import Path
-
 import pytest
 from pytest_mock import MockerFixture
 
@@ -66,7 +64,7 @@ class TestNotify:
     def test_notify_file_not_found(self, mocker: MockerFixture):
         """Test notify when notify-send not found."""
         service = NotificationService(enabled=True)
-        mock_run = mocker.patch("subprocess.run", side_effect=FileNotFoundError)
+        mocker.patch("subprocess.run", side_effect=FileNotFoundError)
 
         result = service.notify("Test", "Test message")
 
@@ -76,7 +74,7 @@ class TestNotify:
     def test_notify_generic_exception(self, mocker: MockerFixture):
         """Test notify when generic exception occurs."""
         service = NotificationService(enabled=True)
-        mock_run = mocker.patch("subprocess.run", side_effect=Exception("Test error"))
+        mocker.patch("subprocess.run", side_effect=Exception("Test error"))
 
         result = service.notify("Test", "Test message")
 
@@ -95,7 +93,9 @@ class TestNotifyHelpers:
         result = service.notify_success("Success message")
 
         assert result is True
-        mock_notify.assert_called_once_with("Wallpicker", "Success message", "emblem-ok-symbolic")
+        mock_notify.assert_called_once_with(
+            "Wallpicker", "Success message", "emblem-ok-symbolic"
+        )
 
     @pytest.mark.integration
     def test_notify_error_helper(self, mocker: MockerFixture):
@@ -106,7 +106,9 @@ class TestNotifyHelpers:
         result = service.notify_error("Error message")
 
         assert result is True
-        mock_notify.assert_called_once_with("Wallpicker", "Error message", "dialog-error-symbolic")
+        mock_notify.assert_called_once_with(
+            "Wallpicker", "Error message", "dialog-error-symbolic"
+        )
 
     @pytest.mark.integration
     def test_notify_info_helper(self, mocker: MockerFixture):

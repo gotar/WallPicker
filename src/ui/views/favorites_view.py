@@ -12,8 +12,9 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gdk, GLib, Gtk, Pango  # noqa: E402
 
-from ui.components.search_filter_bar import SearchFilterBar
-from ui.view_models.favorites_view_model import FavoritesViewModel
+from core.asyncio_integration import schedule_async  # noqa: E402
+from ui.components.search_filter_bar import SearchFilterBar  # noqa: E402
+from ui.view_models.favorites_view_model import FavoritesViewModel  # noqa: E402
 
 
 class FavoritesView(Adw.Bin):
@@ -23,12 +24,16 @@ class FavoritesView(Adw.Bin):
         self,
         view_model: FavoritesViewModel,
         banner_service=None,
+        toast_service=None,
+        thumbnail_loader=None,
         on_set_wallpaper=None,
         on_remove_favorite=None,
     ):
         super().__init__()
         self.view_model = view_model
         self.banner_service = banner_service
+        self.toast_service = toast_service
+        self.thumbnail_loader = thumbnail_loader
         self.on_set_wallpaper = on_set_wallpaper
         self.on_remove_favorite = on_remove_favorite
         self.card_wallpaper_map = {}
@@ -38,6 +43,9 @@ class FavoritesView(Adw.Bin):
 
         self._setup_keyboard_shortcuts()
         self._bind_to_view_model()
+
+    def _run_async(self, coro):
+        schedule_async(coro)
 
     def _create_ui(self):
         """Create main UI structure"""
@@ -74,7 +82,7 @@ class FavoritesView(Adw.Bin):
         # Create flow box for wallpapers grid
         self.wallpapers_grid = Gtk.FlowBox()
         self.wallpapers_grid.set_homogeneous(True)
-        self.wallpapers_grid.set_min_children_per_line(2)
+        self.wallpapers_grid.set_min_children_per_line(4)
         self.wallpapers_grid.set_max_children_per_line(12)
         self.wallpapers_grid.set_column_spacing(12)
         self.wallpapers_grid.set_row_spacing(12)
@@ -129,8 +137,6 @@ class FavoritesView(Adw.Bin):
         return False
 
     def _on_grid_key_pressed(self, controller, keyval, keycode, state):
-        """Handle keyboard navigation within grid."""
-        # Arrow keys: Navigate between cards
         if keyval == Gdk.KEY_Down:
             self._focus_next_card()
             return True
@@ -143,21 +149,33 @@ class FavoritesView(Adw.Bin):
         elif keyval == Gdk.KEY_Left:
             self._focus_prev_card()
             return True
-        # Enter/Return: Set wallpaper
         elif keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
             focused = self.wallpapers_grid.get_focus_child()
             if focused and focused in self.card_wallpaper_map:
                 wallpaper = self.card_wallpaper_map[focused]
-                self.view_model.set_wallpaper(wallpaper)
+                for favorite in self.view_model.favorites:
+                    if favorite.wallpaper.id == wallpaper.id:
+
+                        async def perform_set(fav=favorite):
+                            success, message = (
+                                await self.view_model.set_wallpaper_async(fav)
+                            )
+                            if not self.toast_service:
+                                return
+                            if success:
+                                self.toast_service.show_toast(message, "success")
+                            else:
+                                self.toast_service.show_toast(message, "error")
+
+                        self._run_async(perform_set())
+                        break
             return True
-        # Space: Toggle favorite (remove from favorites)
         elif keyval == Gdk.KEY_space:
             focused = self.wallpapers_grid.get_focus_child()
             if focused and focused in self.card_wallpaper_map:
                 wallpaper = self.card_wallpaper_map[focused]
-                self.view_model.remove_favorite(wallpaper)
+                self.view_model.remove_favorite(wallpaper.id)
             return True
-        # Escape: Clear selection and remove focus
         elif keyval == Gdk.KEY_Escape:
             self.view_model.clear_selection()
             return True
@@ -273,17 +291,20 @@ class FavoritesView(Adw.Bin):
 
     def update_wallpapers_grid(self):
         """Update wallpapers grid display"""
-        # Clear existing cards
-        while self.wallpapers_grid.get_first_child():
-            self.wallpapers_grid.remove(self.wallpapers_grid.get_first_child())
 
-        # Clear card->wallpaper mapping
-        self.card_wallpaper_map.clear()
+        def clear_and_update():
+            while self.wallpapers_grid.get_first_child():
+                self.wallpapers_grid.remove(self.wallpapers_grid.get_first_child())
 
-        # Add new cards
-        for favorite in self.view_model.favorites:
-            card = self._create_wallpaper_card(favorite)
-            self.wallpapers_grid.append(card)
+            self.card_wallpaper_map.clear()
+
+            for favorite in self.view_model.favorites:
+                card = self._create_wallpaper_card(favorite)
+                self.wallpapers_grid.append(card)
+
+            return False
+
+        GLib.idle_add(clear_and_update)
 
     def update_status(self):
         """Update status bar"""
@@ -327,7 +348,10 @@ class FavoritesView(Adw.Bin):
             if texture:
                 image.set_paintable(texture)
 
-        self.view_model.load_thumbnail_async(str(wallpaper.path), on_thumbnail_loaded)
+        if self.thumbnail_loader:
+            self.thumbnail_loader.load_thumbnail_async(
+                str(wallpaper.path), on_thumbnail_loaded
+            )
 
         card.append(image)
 
@@ -339,10 +363,12 @@ class FavoritesView(Adw.Bin):
         filename_label = Gtk.Label()
         filename_label.set_ellipsize(Pango.EllipsizeMode.END)
         filename_label.set_lines(1)
-        filename_label.set_max_width_chars(20)
-        filename_label.set_xalign(0)
+        filename_label.set_max_width_chars(35)
+        filename_label.set_halign(Gtk.Align.CENTER)
         filename_label.set_text(
-            Path(wallpaper.path).name if hasattr(wallpaper, "path") else wallpaper.filename
+            Path(wallpaper.path).name
+            if hasattr(wallpaper, "path")
+            else wallpaper.filename
         )
         filename_label.add_css_class("filename-label")
         info_box.append(filename_label)
@@ -374,7 +400,9 @@ class FavoritesView(Adw.Bin):
         actions_box.add_css_class("card-actions-box")
         actions_box.set_halign(Gtk.Align.CENTER)
 
-        set_btn = Gtk.Button(icon_name="image-x-generic-symbolic", tooltip_text="Set as wallpaper")
+        set_btn = Gtk.Button(
+            icon_name="image-x-generic-symbolic", tooltip_text="Set as wallpaper"
+        )
         set_btn.add_css_class("action-button")
         set_btn.add_css_class("suggested-action")
         set_btn.set_cursor_from_name("pointer")
@@ -397,7 +425,42 @@ class FavoritesView(Adw.Bin):
             self.view_model.toggle_selection(wallpaper)
             self.update_wallpapers_grid()
         elif n_press == 2:
-            self._on_set_wallpaper(None, favorite)
+
+            async def perform_set():
+                success, message = await self.view_model.set_wallpaper_async(favorite)
+                if not self.toast_service:
+                    return
+                if success:
+                    self.toast_service.show_toast(message, "success")
+                else:
+                    self.toast_service.show_toast(message, "error")
+
+            self._run_async(perform_set())
+            if self.view_model.selection_mode:
+                self.update_wallpapers_grid()
+        elif n_press == 2:
+
+            async def perform_set():
+                success, message = await self.view_model.set_wallpaper_async(favorite)
+                if self.toast_service:
+                    if success:
+                        self.toast_service.show_toast(message, "success")
+                    else:
+                        self.toast_service.show_toast(message, "error")
+
+            self._run_async(perform_set())
+            if self.view_model.selection_mode:
+                self.update_wallpapers_grid()
+        elif n_press == 2:
+
+            async def perform_set():
+                success, message = await self.view_model.set_wallpaper_async(favorite)
+                if success:
+                    self.toast_service.show_toast(message, "success")
+                else:
+                    self.toast_service.show_toast(message, "error")
+
+            self._run_async(perform_set())
             if self.view_model.selection_mode:
                 self.update_wallpapers_grid()
 
@@ -405,8 +468,16 @@ class FavoritesView(Adw.Bin):
         self.view_model.toggle_selection(wallpaper)
 
     def _on_set_wallpaper(self, button, favorite):
-        """Handle set wallpaper button click"""
-        self.view_model.set_wallpaper(favorite)
+        async def perform_set():
+            success, message = await self.view_model.set_wallpaper_async(favorite)
+            if not self.toast_service:
+                return
+            if success:
+                self.toast_service.show_toast(message, "success")
+            else:
+                self.toast_service.show_toast(message, "error")
+
+        self._run_async(perform_set())
 
     def _on_search_changed(self, search_text):
         """Handle search text changes."""

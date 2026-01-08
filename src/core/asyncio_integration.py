@@ -5,11 +5,13 @@ by properly integrating Python's asyncio event loop with GTK's GLib main loop.
 """
 
 import asyncio
+import threading
 from collections.abc import Coroutine
 from typing import Any
 
 # Global event loop reference
 _loop: asyncio.AbstractEventLoop | None = None
+_loop_thread: threading.Thread | None = None
 
 
 def setup_event_loop() -> asyncio.AbstractEventLoop:
@@ -19,17 +21,23 @@ def setup_event_loop() -> asyncio.AbstractEventLoop:
         The configured event loop ready for use with GTK.
 
     This should be called once at application startup, typically in launcher.py.
-    The event loop is configured to run continuously alongside GTK's main loop.
+    The event loop is configured to run continuously in a background thread
+    alongside GTK's main loop.
     """
-    global _loop
+    global _loop, _loop_thread
 
     # Create and set the event loop
     asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
     _loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(_loop)
 
-    # Start the keep-alive task to keep the loop running
-    asyncio.run_coroutine_threadsafe(_run_loop_forever(), _loop)
+    # Start the event loop in a separate thread
+    def run_loop():
+        """Run the event loop in a background thread."""
+        asyncio.set_event_loop(_loop)
+        _loop.run_forever()
+
+    _loop_thread = threading.Thread(target=run_loop, daemon=True, name="AsyncioLoop")
+    _loop_thread.start()
 
     return _loop
 
@@ -74,38 +82,6 @@ def schedule_async(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
     # Return the task (wrapped as a Future from run_coroutine_threadsafe)
     # For most UI use cases, you don't need to await this
     return task
-
-
-async def _run_loop_forever() -> None:
-    """Keep the event loop running to process tasks.
-
-    This task runs forever (or until the app exits) to ensure the event loop
-    remains active and can process scheduled tasks.
-    """
-    try:
-        # Sleep for a long time but wake up for tasks
-        while True:
-            await asyncio.sleep(3600)
-    except asyncio.CancelledError:
-        # Gracefully exit when cancelled during app shutdown
-        pass
-
-
-def process_pending() -> None:
-    """Process pending asyncio tasks from GTK's main loop.
-
-    This should be called periodically (e.g., via GLib.timeout_add) to
-    process any pending asyncio tasks and callbacks.
-
-    Example:
-        # In launcher.py or app initialization:
-        GLib.timeout_add(10, lambda: (process_pending(), True)[1])
-    """
-    loop = get_event_loop()
-    if loop.is_running():
-        # Process any pending asyncio callbacks
-        loop.call_soon(loop.stop)
-        loop.run_forever()
 
 
 def create_task(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:

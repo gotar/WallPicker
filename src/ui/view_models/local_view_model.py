@@ -196,6 +196,94 @@ class LocalViewModel(BaseViewModel):
         self._wallpapers.sort(key=get_resolution_pixels, reverse=True)
         self.notify("wallpapers")
 
+    def filter_wallpapers(self, filters: dict) -> None:
+        schedule_async(self._apply_filters_async(filters))
+
+    async def _apply_filters_async(self, filters: dict) -> None:
+        try:
+            self.is_busy = True
+
+            all_wallpapers = await self.local_service.get_wallpapers_async(recursive=True)
+
+            if self.search_query:
+                all_wallpapers = await self.local_service.search_wallpapers_async(
+                    self.search_query, all_wallpapers
+                )
+
+            filtered = self._apply_resolution_filter(all_wallpapers, filters)
+            filtered = self._apply_aspect_filter(filtered, filters)
+
+            GLib.idle_add(self._set_wallpapers, filtered)
+        except Exception as e:
+            self.error_message = f"Failed to filter: {e}"
+        finally:
+            self.is_busy = False
+
+    def _apply_resolution_filter(
+        self, wallpapers: list[LocalWallpaper], filters: dict
+    ) -> list[LocalWallpaper]:
+        min_resolution = filters.get("resolution")
+        if not min_resolution:
+            return wallpapers
+
+        try:
+            min_w, min_h = map(int, min_resolution.split("x"))
+        except ValueError:
+            return wallpapers
+
+        result = []
+        for wp in wallpapers:
+            if not wp.resolution:
+                continue
+            try:
+                parts = wp.resolution.split("x")
+                if len(parts) == 2:
+                    w, h = int(parts[0]), int(parts[1])
+                    if w >= min_w and h >= min_h:
+                        result.append(wp)
+            except ValueError:
+                continue
+        return result
+
+    def _apply_aspect_filter(
+        self, wallpapers: list[LocalWallpaper], filters: dict
+    ) -> list[LocalWallpaper]:
+        ratio_filter = filters.get("ratios")
+        if not ratio_filter:
+            return wallpapers
+
+        ratio_map = {
+            "16x9": (16, 9),
+            "16x10": (16, 10),
+            "21x9": (21, 9),
+            "9x16": (9, 16),
+            "1x1": (1, 1),
+        }
+
+        target = ratio_map.get(ratio_filter)
+        if not target:
+            return wallpapers
+
+        target_ratio = target[0] / target[1]
+        tolerance = 0.1
+
+        result = []
+        for wp in wallpapers:
+            if not wp.resolution:
+                continue
+            try:
+                parts = wp.resolution.split("x")
+                if len(parts) == 2:
+                    w, h = int(parts[0]), int(parts[1])
+                    if h == 0:
+                        continue
+                    wp_ratio = w / h
+                    if abs(wp_ratio - target_ratio) <= tolerance:
+                        result.append(wp)
+            except ValueError:
+                continue
+        return result
+
     async def set_pictures_dir(self, path: Path) -> None:
         self.pictures_dir = path
         self.local_service.pictures_dir = path

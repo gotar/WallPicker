@@ -42,8 +42,9 @@ class LocalView(Adw.BreakpointBin):
         self._search_debounce_timer = None
         self._wallpaper_card_map = {}  # Reverse mapping: wallpaper -> card
         self._path_card_map = {}  # Mapping by path string: path -> card
-        self._upscale_overlays = {}  # Card -> overlay widget
-        self._metadata_labels = {}  # path -> (resolution_label, size_label)
+        self._upscale_overlays = {}
+        self._metadata_labels = {}
+        self._needs_full_rebuild = False
 
         self._create_ui()
 
@@ -79,6 +80,7 @@ class LocalView(Adw.BreakpointBin):
             tab_type="local",
             on_search_changed=self._on_search_changed,
             on_sort_changed=self._on_sort_changed,
+            on_filter_changed=self._on_filter_changed,
         )
         toolbar_wrapper.append(self.search_filter_bar)
 
@@ -99,12 +101,17 @@ class LocalView(Adw.BreakpointBin):
         return False
 
     def _on_sort_changed(self, sorting: str):
+        self._needs_full_rebuild = True
         if sorting == "name":
             self.view_model.sort_by_name()
         elif sorting == "date":
             self.view_model.sort_by_date()
         elif sorting == "resolution":
             self.view_model.sort_by_resolution()
+
+    def _on_filter_changed(self, filters: dict):
+        self._needs_full_rebuild = True
+        self.view_model.filter_wallpapers(filters)
 
     def update_status(self, count: int):
         self.status_label.set_text(f"{count} wallpapers")
@@ -332,7 +339,11 @@ class LocalView(Adw.BreakpointBin):
         self.update_status(len(self.view_model.wallpapers))
 
     def update_wallpaper_grid(self, wallpapers):
-        """Update wallpaper grid incrementally."""
+        if self._needs_full_rebuild:
+            self._needs_full_rebuild = False
+            self._rebuild_wallpaper_grid(wallpapers)
+            return
+
         current_paths = set(self._path_card_map.keys())
         new_paths = {str(w.path) for w in wallpapers}
 
@@ -349,6 +360,23 @@ class LocalView(Adw.BreakpointBin):
                 self.wallpaper_grid.remove(card)
 
         for wallpaper in added_wallpapers:
+            card = self._create_wallpaper_card(wallpaper)
+            self.wallpaper_grid.append(card)
+
+    def _rebuild_wallpaper_grid(self, wallpapers):
+        child = self.wallpaper_grid.get_first_child()
+        while child:
+            next_child = child.get_next_sibling()
+            self.wallpaper_grid.remove(child)
+            child = next_child
+
+        self.card_wallpaper_map.clear()
+        self._wallpaper_card_map.clear()
+        self._path_card_map.clear()
+        self._metadata_labels.clear()
+        self._upscale_overlays.clear()
+
+        for wallpaper in wallpapers:
             card = self._create_wallpaper_card(wallpaper)
             self.wallpaper_grid.append(card)
 

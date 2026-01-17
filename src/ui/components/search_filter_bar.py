@@ -65,9 +65,7 @@ class SearchFilterBar(Gtk.Box):
         self.add_css_class("search-filter-bar")
 
         # Search entry
-        self.search_entry = Gtk.SearchEntry(
-            placeholder_text=self._get_search_placeholder()
-        )
+        self.search_entry = Gtk.SearchEntry(placeholder_text=self._get_search_placeholder())
         self.search_entry.set_hexpand(True)
         self.search_entry.set_size_request(300, -1)
         self.append(self.search_entry)
@@ -88,10 +86,17 @@ class SearchFilterBar(Gtk.Box):
             # Create filter popover
             self._create_filter_popover()
 
+        elif self.tab_type == "local":
+            self.filter_btn = Gtk.MenuButton()
+            self.filter_btn.set_icon_name("preferences-other-symbolic")
+            self.filter_btn.set_tooltip_text("Filters")
+            self.filter_btn.add_css_class("flat")
+            self.append(self.filter_btn)
+
+            self._create_local_filter_popover()
+
         # Active filter chips (initially hidden)
-        self._chips_container = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=8
-        )
+        self._chips_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self._chips_container.add_css_class("filter-chips")
         self._chips_container.set_visible(False)
 
@@ -113,9 +118,7 @@ class SearchFilterBar(Gtk.Box):
         self.sort_dropdown.set_model(string_list)
 
         # Store sort mapping for value lookup
-        self._sort_mapping = {
-            idx: value for idx, (_, value) in enumerate(self._sort_options_list)
-        }
+        self._sort_mapping = {idx: value for idx, (_, value) in enumerate(self._sort_options_list)}
 
     def _get_sort_options(self) -> list[tuple[str, str]]:
         """Get sort options for current tab type.
@@ -268,6 +271,49 @@ class SearchFilterBar(Gtk.Box):
         self.filter_popover.set_child(content_box)
         self.filter_btn.set_popover(self.filter_popover)
 
+    def _create_local_filter_popover(self):
+        self.filter_popover = Gtk.Popover()
+        self.filter_popover.set_position(Gtk.PositionType.BOTTOM)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        content_box.set_margin_top(12)
+        content_box.set_margin_bottom(12)
+        content_box.set_margin_start(12)
+        content_box.set_margin_end(12)
+
+        resolution_label = Gtk.Label(label="Minimum Resolution")
+        resolution_label.add_css_class("heading")
+        resolution_label.set_halign(Gtk.Align.START)
+        content_box.append(resolution_label)
+
+        self.resolution_dropdown = Gtk.DropDown()
+        resolution_list = Gtk.StringList()
+        resolution_list.append("All")
+        resolution_list.append("1920x1080")
+        resolution_list.append("2560x1440")
+        resolution_list.append("3840x2160 (4K)")
+        self.resolution_dropdown.set_model(resolution_list)
+        content_box.append(self.resolution_dropdown)
+
+        aspect_label = Gtk.Label(label="Aspect Ratio")
+        aspect_label.add_css_class("heading")
+        aspect_label.set_halign(Gtk.Align.START)
+        content_box.append(aspect_label)
+
+        self.aspect_combo = Gtk.DropDown()
+        aspect_list = Gtk.StringList()
+        aspect_list.append("All")
+        aspect_list.append("16:9 (Standard)")
+        aspect_list.append("16:10 (Wide)")
+        aspect_list.append("21:9 (Ultrawide)")
+        aspect_list.append("9:16 (Portrait)")
+        aspect_list.append("1:1 (Square)")
+        self.aspect_combo.set_model(aspect_list)
+        content_box.append(self.aspect_combo)
+
+        self.filter_popover.set_child(content_box)
+        self.filter_btn.set_popover(self.filter_popover)
+
     def _setup_callbacks(self):
         """Setup signal callbacks."""
         # Search entry with debouncing
@@ -286,14 +332,16 @@ class SearchFilterBar(Gtk.Box):
             self.purity_nsfw.connect("toggled", self._on_purity_toggled)
 
             # Resolution dropdown
-            self.resolution_dropdown.connect(
-                "notify::selected", self._on_resolution_changed
-            )
+            self.resolution_dropdown.connect("notify::selected", self._on_resolution_changed)
 
             # Advanced filters
             self.top_range_combo.connect("notify::selected", self._on_top_range_changed)
             self.aspect_combo.connect("notify::selected", self._on_aspect_changed)
             self.color_combo.connect("notify::selected", self._on_color_changed)
+
+        elif self.tab_type == "local":
+            self.resolution_dropdown.connect("notify::selected", self._on_local_resolution_changed)
+            self.aspect_combo.connect("notify::selected", self._on_local_aspect_changed)
 
     def _on_search_entry_changed(self, entry: Gtk.SearchEntry):
         """Handle search entry text change with debouncing."""
@@ -502,6 +550,44 @@ class SearchFilterBar(Gtk.Box):
 
         self.filter_popover.popdown()
 
+    def _on_local_resolution_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
+        selected = dropdown.get_selected()
+        if selected == 0:
+            self._remove_filter_chip_by_type("resolution")
+            if "resolution" in self._active_filters:
+                del self._active_filters["resolution"]
+        else:
+            resolutions = ["", "1920x1080", "2560x1440", "3840x2160"]
+            if selected < len(resolutions):
+                value = resolutions[selected]
+                name = dropdown.get_model().get_string(selected)
+                self._active_filters["resolution"] = value
+                self._add_filter_chip("Resolution", name)
+
+        if self._on_filter_changed_callback:
+            self._on_filter_changed_callback(self._active_filters)
+
+        self.filter_popover.popdown()
+
+    def _on_local_aspect_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
+        selected = dropdown.get_selected()
+        if selected == 0:
+            self._remove_filter_chip_by_type("ratios")
+            if "ratios" in self._active_filters:
+                del self._active_filters["ratios"]
+        else:
+            ratios = ["", "16x9", "16x10", "21x9", "9x16", "1x1"]
+            if selected < len(ratios):
+                value = ratios[selected]
+                name = dropdown.get_model().get_string(selected)
+                self._active_filters["ratios"] = value
+                self._add_filter_chip("Aspect Ratio", name)
+
+        if self._on_filter_changed_callback:
+            self._on_filter_changed_callback(self._active_filters)
+
+        self.filter_popover.popdown()
+
     def _add_filter_chip(self, filter_type: str, value: str):
         """Add a filter chip to the chips container.
 
@@ -589,6 +675,8 @@ class SearchFilterBar(Gtk.Box):
             elif filter_type == "Top Range" and self.tab_type == "wallhaven":
                 self.top_range_combo.set_selected(0)
             elif filter_type == "Aspect Ratio" and self.tab_type == "wallhaven":
+                self.aspect_combo.set_selected(0)
+            elif filter_type == "Aspect Ratio" and self.tab_type == "local":
                 self.aspect_combo.set_selected(0)
             elif filter_type == "Color" and self.tab_type == "wallhaven":
                 self.color_combo.set_selected(0)
@@ -678,6 +766,10 @@ class SearchFilterBar(Gtk.Box):
                 self.top_range_combo.set_selected(0)
                 self.aspect_combo.set_selected(0)
                 self.color_combo.set_selected(0)
+
+        elif self.tab_type == "local":
+            self.resolution_dropdown.set_selected(0)
+            self.aspect_combo.set_selected(0)
 
         # Notify filter changed
         if self._on_filter_changed_callback:

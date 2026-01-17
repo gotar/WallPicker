@@ -29,8 +29,9 @@ def mock_local_service(tmp_path):
         for i in range(3)
     ]
 
-    mock.get_wallpapers.return_value = wallpapers
-    mock.search_wallpapers.return_value = wallpapers[:1]
+    mock.get_wallpapers_async = AsyncMock(return_value=wallpapers)
+    mock.search_wallpapers_async = AsyncMock(return_value=wallpapers[:1])
+    mock.delete_wallpaper_async = AsyncMock(return_value=True)
     mock.delete_wallpaper.return_value = True
 
     return mock

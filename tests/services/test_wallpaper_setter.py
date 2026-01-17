@@ -127,34 +127,39 @@ class TestEnsureDaemonRunning:
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
-            # Mock pgrep to find daemon running
-            mock_result = MagicMock()
-            mock_result.returncode = 0
-            with patch("subprocess.run", return_value=mock_result):
-                setter._ensure_daemon_running()
+        # Mock pgrep to find daemon running
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        with patch("subprocess.run", return_value=mock_result):
+            # _ensure_daemon_running is now async, run it in event loop
+            import asyncio
 
-                # pgrep should be called
-                subprocess.run.assert_called_once()
+            asyncio.run(setter._ensure_daemon_running())
+
+            # pgrep should be called
+            subprocess.run.assert_called_once()
 
     def test_ensure_daemon_not_running(self):
         """Test when daemon is not running"""
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
-            # Mock pgrep to not find daemon
-            mock_result = MagicMock()
-            mock_result.returncode = 1
-            with patch("subprocess.run", return_value=mock_result) as mock_run:
-                with patch("subprocess.Popen") as mock_popen:
-                    with patch("time.sleep") as mock_sleep:
-                        setter._ensure_daemon_running()
+        # Mock pgrep to not find daemon
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        with patch("subprocess.run", return_value=mock_result) as mock_run:
+            with patch("subprocess.Popen") as mock_popen:
+                with patch("time.sleep") as mock_sleep:
+                    import asyncio
 
-                        # pgrep should be called
-                        mock_run.assert_called_once()
-                        # daemon should be started
-                        mock_popen.assert_called_once()
-                        # should sleep for daemon to start
-                        mock_sleep.assert_called_once_with(1)
+                    asyncio.run(setter._ensure_daemon_running())
+
+                    # pgrep should be called
+                    mock_run.assert_called_once()
+                    # daemon should be started
+                    mock_popen.assert_called_once()
+                    # should sleep for daemon to start
+                    mock_sleep.assert_called_once_with(1)
 
     def test_ensure_daemon_pgrep_args(self):
         """Test that pgrep is called with correct arguments"""
@@ -167,7 +172,9 @@ class TestEnsureDaemonRunning:
         with patch("subprocess.run", return_value=mock_result) as mock_run:
             with patch("subprocess.Popen"):
                 with patch("time.sleep"):
-                    setter._ensure_daemon_running()
+                    import asyncio
+
+                    asyncio.run(setter._ensure_daemon_running())
 
                     # Check pgrep arguments
                     call_args = mock_run.call_args
@@ -248,7 +255,9 @@ class TestApplyWallpaper:
         test_path = Path("/test/wallpaper.jpg")
 
         with patch("subprocess.run") as mock_run:
-            setter._apply_wallpaper(test_path)
+            import asyncio
+
+            asyncio.run(setter._apply_wallpaper(test_path))
 
             # Check awww command arguments
             call_args = mock_run.call_args
@@ -275,7 +284,9 @@ class TestApplyWallpaper:
         test_path = Path("/test/wallpaper.jpg")
 
         with patch("subprocess.run") as mock_run:
-            setter._apply_wallpaper(test_path)
+            import asyncio
+
+            asyncio.run(setter._apply_wallpaper(test_path))
 
             # Check that check=True is passed
             call_kwargs = mock_run.call_args[1]

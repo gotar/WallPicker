@@ -1,5 +1,6 @@
+import asyncio
+import logging
 import subprocess
-import time
 from pathlib import Path
 
 
@@ -13,38 +14,54 @@ class WallpaperSetter:
         self.symlink_path.parent.mkdir(parents=True, exist_ok=True)
 
     def set_wallpaper(self, image_path: str) -> bool:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            return asyncio.run_coroutine_threadsafe(
+                self.set_wallpaper_async(image_path), loop
+            ).result()
+
+        return asyncio.run(self.set_wallpaper_async(image_path))
+
+    async def set_wallpaper_async(self, image_path: str) -> bool:
         path = Path(image_path)
         if not path.exists():
             return False
 
         try:
-            self._ensure_daemon_running()
+            await self._ensure_daemon_running()
             self._update_symlink(path)
-            self._apply_wallpaper(path)
-            self._cleanup_old_wallpapers()
+            await self._apply_wallpaper(path)
+            await asyncio.to_thread(self._cleanup_old_wallpapers)
             return True
         except (OSError, subprocess.SubprocessError, RuntimeError) as e:
-            import logging
-
             logger = logging.getLogger(__name__)
             logger.error(f"Failed to set wallpaper: {e}", exc_info=True)
             return False
         except Exception as e:
-            import logging
-
             logger = logging.getLogger(__name__)
             logger.critical(f"Unexpected error setting wallpaper: {e}", exc_info=True)
             return False
 
-    def _ensure_daemon_running(self):
-        result = subprocess.run(["pgrep", "-x", "awww-daemon"], capture_output=True)
-        if result.returncode != 0:
-            subprocess.Popen(
-                ["awww-daemon"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+    async def _ensure_daemon_running(self):
+        process = await asyncio.create_subprocess_exec(
+            "pgrep",
+            "-x",
+            "awww-daemon",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await process.communicate()
+        if process.returncode != 0:
+            await asyncio.create_subprocess_exec(
+                "awww-daemon",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
             )
-            time.sleep(1)
+            await asyncio.sleep(1)
 
     def _update_symlink(self, path: Path):
         if self.symlink_path.is_symlink():
@@ -52,23 +69,32 @@ class WallpaperSetter:
 
         self.symlink_path.symlink_to(path)
 
-    def _apply_wallpaper(self, path: Path):
-        subprocess.run(
-            [
-                "awww",
-                "img",
-                "--transition-type",
-                "random",
-                "--transition-fps",
-                "60",
-                "--transition-duration",
-                "3",
-                "--transition-bezier",
-                ".43,1.19,1,.4",
-                str(path),
-            ],
-            check=True,
+    async def _apply_wallpaper(self, path: Path):
+        process = await asyncio.create_subprocess_exec(
+            "awww",
+            "img",
+            "--transition-type",
+            "random",
+            "--transition-fps",
+            "60",
+            "--transition-duration",
+            "3",
+            "--transition-bezier",
+            ".43,1.19,1,.4",
+            str(path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
+        try:
+            _stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=15)
+        except TimeoutError as e:
+            process.kill()
+            await process.communicate()
+            raise RuntimeError("Wallpaper transition timed out") from e
+
+        if process.returncode != 0:
+            stderr_text = stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(stderr_text or "Wallpaper transition failed")
 
     def _cleanup_old_wallpapers(self):
         wallpapers = sorted(
@@ -86,8 +112,6 @@ class WallpaperSetter:
                 if target.exists():
                     return str(target)
             except (OSError, RuntimeError) as e:
-                import logging
-
                 logger = logging.getLogger(__name__)
                 logger.debug(f"Could not resolve symlink {self.symlink_path}: {e}")
         return None

@@ -174,7 +174,11 @@ class FavoritesView(Adw.Bin):
             focused = self.wallpapers_grid.get_focus_child()
             if focused and focused in self.card_wallpaper_map:
                 wallpaper = self.card_wallpaper_map[focused]
-                self.view_model.remove_favorite(wallpaper.id)
+
+                async def remove_favorite():
+                    await self.view_model.remove_favorite(wallpaper.id)
+
+                self._run_async(remove_favorite())
             return True
         elif keyval == Gdk.KEY_Escape:
             self.view_model.clear_selection()
@@ -250,7 +254,7 @@ class FavoritesView(Adw.Bin):
         # Check if we're at the top of scroll and pulling down
         if dy < -100 and current_value < 50 and not self.is_refreshing:
             self.is_refreshing = True
-            self.view_model.load_favorites()
+            self._run_async(self.view_model.load_favorites())
 
             # Reset flag after a delay
             GLib.timeout_add(1000, self._reset_refresh_flag)
@@ -271,9 +275,18 @@ class FavoritesView(Adw.Bin):
 
     def _on_set_all_selected(self):
         selected = self.view_model.get_selected_wallpapers()
-        for favorite in selected:
-            self.view_model.set_wallpaper(favorite)
-            break
+        if not selected:
+            return
+
+        async def set_first():
+            success, message = await self.view_model.set_wallpaper_async(selected[0])
+            if self.toast_service:
+                if success:
+                    self.toast_service.show_toast(message, "success")
+                else:
+                    self.toast_service.show_toast(message, "error")
+
+        self._run_async(set_first())
         self.view_model.clear_selection()
 
     def _on_favorites_changed(self, *args):
@@ -438,31 +451,6 @@ class FavoritesView(Adw.Bin):
             self._run_async(perform_set())
             if self.view_model.selection_mode:
                 self.update_wallpapers_grid()
-        elif n_press == 2:
-
-            async def perform_set():
-                success, message = await self.view_model.set_wallpaper_async(favorite)
-                if self.toast_service:
-                    if success:
-                        self.toast_service.show_toast(message, "success")
-                    else:
-                        self.toast_service.show_toast(message, "error")
-
-            self._run_async(perform_set())
-            if self.view_model.selection_mode:
-                self.update_wallpapers_grid()
-        elif n_press == 2:
-
-            async def perform_set():
-                success, message = await self.view_model.set_wallpaper_async(favorite)
-                if success:
-                    self.toast_service.show_toast(message, "success")
-                else:
-                    self.toast_service.show_toast(message, "error")
-
-            self._run_async(perform_set())
-            if self.view_model.selection_mode:
-                self.update_wallpapers_grid()
 
     def _on_selection_toggled(self, wallpaper, is_selected):
         self.view_model.toggle_selection(wallpaper)
@@ -478,10 +466,6 @@ class FavoritesView(Adw.Bin):
                 self.toast_service.show_toast(message, "error")
 
         self._run_async(perform_set())
-
-    def _on_search_changed(self, search_text):
-        """Handle search text changes."""
-        self.view_model.search_query = search_text
 
     def _on_remove_favorite(self, button, favorite):
         window = self.get_root()
@@ -500,7 +484,11 @@ class FavoritesView(Adw.Bin):
 
         def on_response(dialog, response):
             if response == "remove":
-                self.view_model.remove_favorite(favorite.wallpaper_id)
+
+                async def remove_favorite():
+                    await self.view_model.remove_favorite(favorite.wallpaper_id)
+
+                self._run_async(remove_favorite())
             dialog.destroy()
 
         dialog.connect("response", on_response)

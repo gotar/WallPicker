@@ -359,10 +359,18 @@ class WallhavenView(Adw.Bin):
 
     def _on_set_all_selected(self):
         selected = self.view_model.get_selected_wallpapers()
-        for wallpaper in selected:
-            if wallpaper.path:
-                self.view_model.wallpaper_setter.set_wallpaper(wallpaper.path)
-                break
+        if not selected:
+            return
+
+        async def set_first():
+            success, message = await self.view_model.set_wallpaper(selected[0])
+            if self.toast_service:
+                if success:
+                    self.toast_service.show_success(message)
+                else:
+                    self.toast_service.show_error(message)
+
+        self._run_async(set_first())
         self.view_model.clear_selection()
 
     def _on_search_clicked(self, button):

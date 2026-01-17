@@ -345,22 +345,22 @@ class WallhavenViewModel(BaseViewModel):
         """Check if pagination navigation is available"""
         return self.has_next_page() or self.has_prev_page()
 
-    def set_wallpaper(self, wallpaper: Wallpaper) -> bool:
+    async def set_wallpaper(self, wallpaper: Wallpaper) -> tuple[bool, str]:
         try:
             self.is_busy = True
             self.error_message = None
 
-            # Download if needed
-            local_path = self._download_wallpaper_sync(wallpaper)
+            local_path = await self.download_wallpaper(wallpaper)
             if not local_path:
-                return False
+                return False, "Failed to download wallpaper"
 
-            # Set as wallpaper
-            result = self.wallpaper_setter.set_wallpaper(local_path)
-            return result
+            success = await self.wallpaper_setter.set_wallpaper_async(local_path)
+            if success:
+                return True, "Wallpaper set successfully"
+            return False, "Failed to set wallpaper"
         except Exception as e:
             self.error_message = str(e)
-            return False
+            return False, str(e)
         finally:
             self.is_busy = False
 
@@ -375,10 +375,12 @@ class WallhavenViewModel(BaseViewModel):
                 self.is_busy = True
                 self.error_message = None
 
-                if self.favorites_service.is_favorite(wallpaper.id):
+                if await asyncio.to_thread(
+                    self.favorites_service.is_favorite, wallpaper.id
+                ):
                     return False, "Already in favorites"
 
-                self.favorites_service.add_favorite(wallpaper)
+                await asyncio.to_thread(self.favorites_service.add_favorite, wallpaper)
                 return True, "Added to favorites"
 
             except (ValueError, OSError) as e:
@@ -397,7 +399,7 @@ class WallhavenViewModel(BaseViewModel):
             if not local_path:
                 return False, "Failed to download wallpaper"
 
-            success = self.wallpaper_setter.set_wallpaper(local_path)
+            success = await self.wallpaper_setter.set_wallpaper_async(local_path)
             if success:
                 return True, "Wallpaper set successfully"
             else:

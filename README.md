@@ -113,6 +113,23 @@ For animated transitions (optional but recommended):
 yay -S awww
 ```
 
+#### Maintainer AUR workflow (subtree)
+
+This repo keeps AUR packaging files in `aur/`.
+
+Add the remote once (if missing):
+```bash
+git remote add aur aur@aur.archlinux.org:wallpicker.git
+```
+
+Sync with AUR:
+```bash
+git subtree pull --prefix aur aur master
+git subtree push --prefix aur aur master
+```
+
+Update `aur/PKGBUILD` and `aur/.SRCINFO` before pushing.
+
 ## Usage
 
 Launch the application:

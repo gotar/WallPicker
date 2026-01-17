@@ -12,6 +12,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gdk, GLib, GObject, Gtk, Pango  # noqa: E402
 
+from core.asyncio_integration import schedule_async  # noqa: E402
 from ui.components.search_filter_bar import SearchFilterBar  # noqa: E402
 from ui.view_models.local_view_model import LocalViewModel  # noqa: E402
 
@@ -88,15 +89,14 @@ class LocalView(Adw.BreakpointBin):
         if self._search_debounce_timer:
             GLib.source_remove(self._search_debounce_timer)
 
-        self.view_model.search_query = text
-        self._search_debounce_timer = GLib.timeout_add(300, self._trigger_search)
+        self._search_debounce_timer = GLib.timeout_add(300, self._trigger_search, text)
 
-    def _trigger_search(self) -> bool:
+    def _trigger_search(self, text: str) -> bool:
         if self._search_debounce_timer:
             self._search_debounce_timer = None
 
-        self.view_model.search_wallpapers(self.view_model.search_query)
-        return False  # Don't repeat timer
+        schedule_async(self.view_model.search_wallpapers(text))
+        return False
 
     def _on_sort_changed(self, sorting: str):
         if sorting == "name":
@@ -266,10 +266,7 @@ class LocalView(Adw.BreakpointBin):
         # Check if we're at the top of the scroll and pulling down
         if dy < -100 and current_value < 50 and not self.is_refreshing:
             self.is_refreshing = True
-            self.view_model.refresh_wallpapers()
-
-            # Reset flag after a delay
-            from gi.repository import GLib  # noqa: E402
+            schedule_async(self.view_model.refresh_wallpapers())
 
             GLib.timeout_add(1000, self._reset_refresh_flag)
 
@@ -293,11 +290,17 @@ class LocalView(Adw.BreakpointBin):
 
     def _on_set_all_selected(self):
         selected = self.view_model.get_selected_wallpapers()
-        for wallpaper in selected:
-            success, message = self.view_model.set_wallpaper(wallpaper)
+        if not selected:
+            return
+
+        async def set_first():
+            success, message = await self.view_model.set_wallpaper(selected[0])
             if success and self.toast_service:
                 self.toast_service.show_success(message)
-            break
+            elif self.toast_service:
+                self.toast_service.show_error(message)
+
+        schedule_async(set_first())
         self.view_model.clear_selection()
 
     def _on_folder_clicked(self, button):
@@ -310,7 +313,11 @@ class LocalView(Adw.BreakpointBin):
                 folder = dialog.select_folder_finish(result)
                 if folder:
                     path = Path(folder.get_path())
-                    self.view_model.set_pictures_dir(path)
+
+                    async def set_dir():
+                        await self.view_model.set_pictures_dir(path)
+
+                    schedule_async(set_dir())
             except (RuntimeError, TypeError) as e:
                 import logging
 
@@ -478,22 +485,28 @@ class LocalView(Adw.BreakpointBin):
         self.view_model.toggle_selection(wallpaper)
 
     def _on_set_wallpaper(self, button, wallpaper):
-        success, message = self.view_model.set_wallpaper(wallpaper)
-        if success:
-            if self.toast_service:
-                self.toast_service.show_success(message)
-        else:
-            if self.toast_service:
-                self.toast_service.show_error(message)
+        async def set_wallpaper():
+            success, message = await self.view_model.set_wallpaper(wallpaper)
+            if success:
+                if self.toast_service:
+                    self.toast_service.show_success(message)
+            else:
+                if self.toast_service:
+                    self.toast_service.show_error(message)
+
+        schedule_async(set_wallpaper())
 
     def _on_add_to_favorites(self, button, wallpaper):
-        success, message = self.view_model.add_to_favorites(wallpaper)
-        if success:
-            if self.toast_service:
-                self.toast_service.show_success(message)
-        else:
-            if self.toast_service:
-                self.toast_service.show_error(message)
+        async def add_to_favorites():
+            success, message = await self.view_model.add_to_favorites(wallpaper)
+            if success:
+                if self.toast_service:
+                    self.toast_service.show_success(message)
+            else:
+                if self.toast_service:
+                    self.toast_service.show_error(message)
+
+        schedule_async(add_to_favorites())
 
     def _on_delete_wallpaper(self, button, wallpaper):
         window = self.get_root()
@@ -511,14 +524,18 @@ class LocalView(Adw.BreakpointBin):
 
         def on_response(dialog, response):
             if response == "delete":
-                success, message = self.view_model.delete_wallpaper(wallpaper)
-                if success:
-                    if self.toast_service:
-                        self.toast_service.show_success(message)
-                    self.update_status(len(self.view_model.wallpapers))
-                else:
-                    if self.toast_service:
-                        self.toast_service.show_error(message)
+
+                async def delete_wallpaper():
+                    success, message = await self.view_model.delete_wallpaper(wallpaper)
+                    if success:
+                        if self.toast_service:
+                            self.toast_service.show_success(message)
+                        self.update_status(len(self.view_model.wallpapers))
+                    else:
+                        if self.toast_service:
+                            self.toast_service.show_error(message)
+
+                schedule_async(delete_wallpaper())
 
         dialog.connect("response", on_response)
         dialog.present()
@@ -683,8 +700,9 @@ class LocalView(Adw.BreakpointBin):
         if metadata_label and self.thumbnail_loader:
             # Reload resolution and size from file
             try:
-                from PIL import Image
                 import os
+
+                from PIL import Image
 
                 file_path = path
                 file_stat = os.stat(file_path)

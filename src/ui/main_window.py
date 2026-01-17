@@ -73,7 +73,9 @@ class MainWindow(Adw.Application):
             self.favorites_service = FavoritesService()
             self.wallhaven_service = WallhavenService()
             self.thumbnail_cache = ThumbnailCache()
-            self.thumbnail_loader = ThumbnailLoader(thumbnail_cache=self.thumbnail_cache)
+            self.thumbnail_loader = ThumbnailLoader(
+                thumbnail_cache=self.thumbnail_cache
+            )
             self.banner_service = BannerService(self)
 
         self.wallhaven_view_model = WallhavenViewModel(
@@ -110,7 +112,9 @@ class MainWindow(Adw.Application):
         )
 
         # Add responsive breakpoints
-        breakpoint = Adw.Breakpoint(condition=Adw.BreakpointCondition.parse("max-width: 600px"))
+        breakpoint = Adw.Breakpoint(
+            condition=Adw.BreakpointCondition.parse("max-width: 600px")
+        )
         self.window.add_breakpoint(breakpoint)
 
         self.window.present()
@@ -178,7 +182,9 @@ class WallPickerWindow(Adw.ApplicationWindow):
         self.thumbnail_loader = thumbnail_loader
         self.config_service = config_service
 
-        self.wallhaven_view_model.connect("wallpaper-downloaded", self._on_wallpaper_downloaded)
+        self.wallhaven_view_model.connect(
+            "wallpaper-downloaded", self._on_wallpaper_downloaded
+        )
 
         self._create_ui()
         self._setup_menu()
@@ -187,25 +193,34 @@ class WallPickerWindow(Adw.ApplicationWindow):
 
     def _on_set_wallpaper(self, wallpaper):
         """Set wallpaper from any view."""
-        self.wallpaper_setter.set_wallpaper(wallpaper.path)
-        self.toast_service.show_info("Wallpaper set")
+
+        async def set_wallpaper():
+            await self.wallpaper_setter.set_wallpaper_async(wallpaper.path)
+            self.toast_service.show_info("Wallpaper set")
+
+        schedule_async(set_wallpaper())
 
     def _on_delete_wallpaper(self, wallpaper):
         """Delete wallpaper from local view."""
 
-        # Use the view model to delete (it has the service)
-        self.local_view_model.delete_wallpaper(wallpaper)
-        self.toast_service.show_info("Wallpaper deleted")
+        async def delete_wallpaper():
+            await self.local_view_model.delete_wallpaper(wallpaper)
+            self.toast_service.show_info("Wallpaper deleted")
+
+        schedule_async(delete_wallpaper())
 
     def _on_remove_favorite(self, favorite):
         """Remove favorite from favorites view."""
-        # Use the view model to remove (it has the service)
-        self.favorites_view_model.remove_favorite(favorite)
-        self.toast_service.show_info("Removed from favorites")
+
+        async def remove_favorite():
+            await self.favorites_view_model.remove_favorite(favorite)
+            self.toast_service.show_info("Removed from favorites")
+
+        schedule_async(remove_favorite())
 
     def _on_wallpaper_downloaded(self, view_model, download_path):
         """Refresh local view when wallpaper is downloaded from Wallhaven."""
-        self.local_view_model.load_wallpapers()
+        schedule_async(self.local_view_model.load_wallpapers())
 
     def _create_ui(self):
         """Create main UI with Adw.ToolbarView layout."""
@@ -263,7 +278,9 @@ class WallPickerWindow(Adw.ApplicationWindow):
             self.toast_service,
             self.thumbnail_loader,
         )
-        wallhaven_page = self.stack.add_titled(self.wallhaven_view, "wallhaven", "Wallhaven")
+        wallhaven_page = self.stack.add_titled(
+            self.wallhaven_view, "wallhaven", "Wallhaven"
+        )
         wallhaven_page.set_icon_name("globe-symbolic")
 
         self.favorites_view = FavoritesView(
@@ -272,7 +289,9 @@ class WallPickerWindow(Adw.ApplicationWindow):
             self.toast_service,
             self.thumbnail_loader,
         )
-        favorites_page = self.stack.add_titled(self.favorites_view, "favorites", "Favorites")
+        favorites_page = self.stack.add_titled(
+            self.favorites_view, "favorites", "Favorites"
+        )
         favorites_page.set_icon_name("starred-symbolic")
 
         # Connect ViewSwitcherBar to ViewStack
@@ -292,8 +311,8 @@ class WallPickerWindow(Adw.ApplicationWindow):
 
         # Load initial data
         try:
-            self.local_view_model.load_wallpapers()
-            self.favorites_view_model.load_favorites()
+            schedule_async(self.local_view_model.load_wallpapers())
+            schedule_async(self.favorites_view_model.load_favorites())
         except Exception as e:
             self.toast_service.show_error(f"Failed to load: {e}")
 
@@ -307,7 +326,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
 
         if visible_child == self.favorites_view:
             logger.info("Switching to Favorites tab")
-            self.favorites_view_model.load_favorites()
+            schedule_async(self.favorites_view_model.load_favorites())
         elif visible_child == self.wallhaven_view:
             # Only load Wallhaven wallpapers if not already loaded
             logger.info(
@@ -321,10 +340,10 @@ class WallPickerWindow(Adw.ApplicationWindow):
         """Handle refresh button click."""
         visible_child = self.stack.get_visible_child()
         if visible_child == self.local_view:
-            self.local_view_model.load_wallpapers()
+            schedule_async(self.local_view_model.load_wallpapers())
             self.toast_service.show_info("Local wallpapers refreshed")
         elif visible_child == self.favorites_view:
-            self.favorites_view_model.load_favorites()
+            schedule_async(self.favorites_view_model.load_favorites())
             self.toast_service.show_info("Favorites refreshed")
         elif visible_child == self.wallhaven_view:
             schedule_async(self.wallhaven_view_model.load_initial_wallpapers())
@@ -492,11 +511,15 @@ class WallPickerWindow(Adw.ApplicationWindow):
     def _focus_search_entry(self, clear=False):
         """Focus search entry in current view."""
         visible_child = self.stack.get_visible_child()
-        if visible_child == self.wallhaven_view and hasattr(self.wallhaven_view, "search_entry"):
+        if visible_child == self.wallhaven_view and hasattr(
+            self.wallhaven_view, "search_entry"
+        ):
             if clear:
                 self.wallhaven_view.search_entry.set_text("")
             self.wallhaven_view.search_entry.grab_focus()
-        elif visible_child == self.favorites_view and hasattr(self.favorites_view, "search_entry"):
+        elif visible_child == self.favorites_view and hasattr(
+            self.favorites_view, "search_entry"
+        ):
             if clear:
                 self.favorites_view.search_entry.set_text("")
             self.favorites_view.search_entry.grab_focus()
@@ -509,7 +532,9 @@ class WallPickerWindow(Adw.ApplicationWindow):
         """Handle focus change when tab changes."""
         visible_child = stack.get_visible_child()
         # Focus search entry if available
-        if visible_child == self.wallhaven_view and hasattr(self.wallhaven_view, "search_entry"):
+        if visible_child == self.wallhaven_view and hasattr(
+            self.wallhaven_view, "search_entry"
+        ):
             # Don't auto-focus search on wallhaven, user can use Ctrl+F
             pass
         elif visible_child == self.local_view:

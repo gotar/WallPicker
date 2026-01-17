@@ -4,31 +4,31 @@ import signal
 import sys
 from pathlib import Path
 
-# Add src directory to path FIRST
-project_dir = Path(__file__).parent
-src_dir = project_dir / "src"
-sys.path.insert(0, str(src_dir))
 
-# Change to project directory
-os.chdir(project_dir)
+def main() -> None:
+    project_dir = Path(__file__).parent
+    src_dir = project_dir / "src"
+    sys.path.insert(0, str(src_dir))
 
-import gi
+    os.chdir(project_dir)
 
-gi.require_version("Gtk", "4.0")
-gi.require_version("Adw", "1")
+    import gi
 
-# Set up asyncio event loop for GTK integration
-from core.asyncio_integration import setup_event_loop
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
 
-loop = setup_event_loop()
+    from core.asyncio_integration import setup_event_loop
+    from ui.main_window import MainWindow
 
-# Import and run main
-from ui.main_window import MainWindow
+    setup_event_loop()
 
-app = MainWindow()
+    app = MainWindow()
 
-# Disable default SIGINT handler that conflicts with GTK
-signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-exit_status = app.run()
-sys.exit(exit_status)
+    exit_status = app.run()
+    sys.exit(exit_status)
+
+
+if __name__ == "__main__":
+    main()

@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from gi.repository import GObject  # noqa: E402
+from gi.repository import GLib, GObject  # noqa: E402
 
 from core.asyncio_integration import schedule_async  # noqa: E402
 from domain.wallpaper import WallpaperPurity  # noqa: E402
@@ -64,6 +64,11 @@ class LocalViewModel(BaseViewModel):
     def wallpapers(self, value: list[LocalWallpaper]) -> None:
         self._wallpapers = value
 
+    def _set_wallpapers(self, wallpapers: list[LocalWallpaper]) -> bool:
+        self._wallpapers = wallpapers
+        self.notify("wallpapers")
+        return False
+
     @GObject.Property(type=int)
     def upscaling_queue_size(self) -> int:
         """Number of items waiting in upscaling queue"""
@@ -90,8 +95,7 @@ class LocalViewModel(BaseViewModel):
             self._active_count,
         )
 
-    def load_wallpapers(self, recursive: bool = True) -> None:
-        """Load wallpapers from local directory"""
+    async def load_wallpapers(self, recursive: bool = True) -> None:
         try:
             self.is_busy = True
             self.error_message = None
@@ -99,40 +103,39 @@ class LocalViewModel(BaseViewModel):
             if self.pictures_dir:
                 self.local_service.pictures_dir = self.pictures_dir
 
-            wallpapers = self.local_service.get_wallpapers(recursive=recursive)
-            self.wallpapers = wallpapers
+            wallpapers = await self.local_service.get_wallpapers_async(recursive=recursive)
+            self.search_query = ""
+            GLib.idle_add(self._set_wallpapers, wallpapers)
 
         except Exception as e:
             self.error_message = f"Failed to load wallpapers: {e}"
-            self.wallpapers = []
+            GLib.idle_add(self._set_wallpapers, [])
         finally:
             self.is_busy = False
 
-    def search_wallpapers(self, query: str = "") -> None:
-        """Search wallpapers"""
+    async def search_wallpapers(self, query: str = "") -> None:
         try:
             self.is_busy = True
             self.error_message = None
             self.search_query = query
 
             if not query or query.strip() == "":
-                # Load all wallpapers if query is empty
-                self.load_wallpapers()
+                await self.load_wallpapers()
             else:
-                results = self.local_service.search_wallpapers(query, self.wallpapers)
-                self.wallpapers = results
+                results = await self.local_service.search_wallpapers_async(query, self.wallpapers)
+                GLib.idle_add(self._set_wallpapers, results)
 
         except Exception as e:
             self.error_message = f"Failed to search wallpapers: {e}"
-            self.wallpapers = []
+            GLib.idle_add(self._set_wallpapers, [])
         finally:
             self.is_busy = False
 
-    def set_wallpaper(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
+    async def set_wallpaper(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         try:
             self.is_busy = True
             self.error_message = None
-            result = self.wallpaper_setter.set_wallpaper(str(wallpaper.path))
+            result = await self.wallpaper_setter.set_wallpaper_async(str(wallpaper.path))
             if result:
                 return True, "Wallpaper set successfully"
             return False, "Failed to set wallpaper"
@@ -142,12 +145,12 @@ class LocalViewModel(BaseViewModel):
         finally:
             self.is_busy = False
 
-    def delete_wallpaper(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
+    async def delete_wallpaper(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         try:
             self.is_busy = True
             self.error_message = None
 
-            result = self.local_service.delete_wallpaper(wallpaper.path)
+            result = await self.local_service.delete_wallpaper_async(wallpaper.path)
 
             if result:
                 if wallpaper in self._wallpapers:
@@ -163,10 +166,9 @@ class LocalViewModel(BaseViewModel):
         finally:
             self.is_busy = False
 
-    def refresh_wallpapers(self) -> None:
-        """Refresh wallpaper list from disk"""
+    async def refresh_wallpapers(self) -> None:
         self.search_query = ""
-        self.load_wallpapers()
+        await self.load_wallpapers()
 
     def sort_by_name(self) -> None:
         """Sort wallpapers by filename (A-Z)"""
@@ -194,19 +196,19 @@ class LocalViewModel(BaseViewModel):
         self._wallpapers.sort(key=get_resolution_pixels, reverse=True)
         self.notify("wallpapers")
 
-    def set_pictures_dir(self, path: Path) -> None:
+    async def set_pictures_dir(self, path: Path) -> None:
         self.pictures_dir = path
         self.local_service.pictures_dir = path
         if self.config_service:
-            self.config_service.set_pictures_dir(path)
-        self.load_wallpapers()
+            await asyncio.to_thread(self.config_service.set_pictures_dir, path)
+        await self.load_wallpapers()
 
     def select_all(self) -> None:
         """Select all wallpapers."""
         self._selected_wallpapers_list = self.wallpapers.copy()
         self._update_selection_state()
 
-    def add_to_favorites(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
+    async def add_to_favorites(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         if self.is_busy:
             return False, "Operation in progress"
 
@@ -220,22 +222,12 @@ class LocalViewModel(BaseViewModel):
 
             path_hash = hashlib.sha256(str(wallpaper.path).encode()).hexdigest()[:16]
             wallpaper_id = f"local_{path_hash}"
-            if self.favorites_service.is_favorite(wallpaper_id):
+            if await asyncio.to_thread(self.favorites_service.is_favorite, wallpaper_id):
                 return False, "Already in favorites"
-
-            from PIL import Image
 
             from domain.wallpaper import Resolution, Wallpaper, WallpaperSource
 
-            width, height = 1920, 1080
-            try:
-                with Image.open(wallpaper.path) as img:
-                    width, height = img.size
-            except (OSError, ValueError) as e:
-                import logging
-
-                logger = logging.getLogger(__name__)
-                logger.debug(f"Could not read image dimensions from {wallpaper.path}: {e}")
+            width, height = await asyncio.to_thread(self._get_image_size, wallpaper.path)
 
             wallpaper_domain = Wallpaper(
                 id=wallpaper_id,
@@ -247,7 +239,7 @@ class LocalViewModel(BaseViewModel):
                 purity=WallpaperPurity.SFW,
             )
 
-            self.favorites_service.add_favorite(wallpaper_domain)
+            await asyncio.to_thread(self.favorites_service.add_favorite, wallpaper_domain)
             return True, f"Added '{wallpaper.filename}' to favorites"
 
         except Exception as e:
@@ -255,6 +247,17 @@ class LocalViewModel(BaseViewModel):
             return False, str(e)
         finally:
             self.is_busy = False
+
+    def _get_image_size(self, path: Path) -> tuple[int, int]:
+        width, height = 1920, 1080
+        try:
+            from PIL import Image
+
+            with Image.open(path) as img:
+                width, height = img.size
+        except (OSError, ValueError):
+            pass
+        return width, height
 
     def queue_upscale(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         """Queue a wallpaper for upscaling. Non-blocking, supports concurrent operations.
@@ -308,7 +311,8 @@ class LocalViewModel(BaseViewModel):
                 self._finish_upscale(wallpaper, *result)
                 return result
 
-            model_path = Path.home() / ".local/lib/realesrgan-ncnn-vulkan/models"
+            # realesrgan-ncnn-vulkan models directory
+            # model_path = Path.home() / ".local/lib/realesrgan-ncnn-vulkan/models"
 
             # Create temp file for upscaled image
             temp_path = (
@@ -336,7 +340,10 @@ class LocalViewModel(BaseViewModel):
 
                 if process.returncode != 0:
                     stderr_text = stderr.decode("utf-8", errors="replace").strip()
-                    result = False, f"Upscaling failed: {stderr_text or 'Unknown error'}"
+                    result = (
+                        False,
+                        f"Upscaling failed: {stderr_text or 'Unknown error'}",
+                    )
                     self._finish_upscale(wallpaper, *result)
                     return result
 

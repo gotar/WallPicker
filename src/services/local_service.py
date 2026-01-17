@@ -3,6 +3,7 @@ Local Wallpaper Service
 Handles browsing, searching, and deleting local wallpapers
 """
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -42,6 +43,14 @@ class LocalWallpaperService:
             self.pictures_dir = Path.home() / "Pictures"
 
     def get_wallpapers(self, recursive: bool = True) -> list[LocalWallpaper]:
+        return self._get_wallpapers_sync(recursive=recursive)
+
+    async def get_wallpapers_async(
+        self, recursive: bool = True
+    ) -> list[LocalWallpaper]:
+        return await asyncio.to_thread(self._get_wallpapers_sync, recursive)
+
+    def _get_wallpapers_sync(self, recursive: bool = True) -> list[LocalWallpaper]:
         """
         Get list of wallpapers from Pictures directory
 
@@ -95,15 +104,6 @@ class LocalWallpaperService:
         return wallpapers
 
     def delete_wallpaper(self, wallpaper_path: Path) -> bool:
-        """
-        Move wallpaper to trash (safe delete)
-
-        Args:
-            wallpaper_path: Path to wallpaper file
-
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             if wallpaper_path.exists():
                 send2trash(str(wallpaper_path))
@@ -113,6 +113,9 @@ class LocalWallpaperService:
             logging.error(f"Error deleting wallpaper: {e}")
             return False
 
+    async def delete_wallpaper_async(self, wallpaper_path: Path) -> bool:
+        return await asyncio.to_thread(self.delete_wallpaper, wallpaper_path)
+
     def get_pictures_dir(self) -> Path:
         """Get Pictures directory path"""
         return self.pictures_dir
@@ -120,16 +123,6 @@ class LocalWallpaperService:
     def search_wallpapers(
         self, query: str, wallpapers: list[LocalWallpaper] | None = None
     ) -> list[LocalWallpaper]:
-        """
-        Search wallpapers using fuzzy matching
-
-        Args:
-            query: Search query string
-            wallpapers: List to search (if None, gets all wallpapers)
-
-        Returns:
-            List of LocalWallpaper objects sorted by relevance
-        """
         if not query or query.strip() == "":
             return self.get_wallpapers() if wallpapers is None else wallpapers
 
@@ -150,3 +143,8 @@ class LocalWallpaperService:
 
         scored_wallpapers.sort(key=lambda x: x[1], reverse=True)
         return [wp for wp, _ in scored_wallpapers]
+
+    async def search_wallpapers_async(
+        self, query: str, wallpapers: list[LocalWallpaper] | None = None
+    ) -> list[LocalWallpaper]:
+        return await asyncio.to_thread(self.search_wallpapers, query, wallpapers)

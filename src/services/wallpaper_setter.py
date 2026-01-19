@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import subprocess
 from pathlib import Path
 
@@ -9,9 +10,7 @@ from core.asyncio_integration import get_event_loop
 class WallpaperSetter:
     def __init__(self):
         self.cache_dir = Path.home() / ".cache" / "wallpaper"
-        self.symlink_path = (
-            Path.home() / ".config" / "omarchy" / "current" / "background"
-        )
+        self.symlink_path = Path.home() / ".config" / "omarchy" / "current" / "background"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.symlink_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -19,9 +18,7 @@ class WallpaperSetter:
         """Set wallpaper synchronously, using the global event loop."""
         try:
             loop = get_event_loop()
-            future = asyncio.run_coroutine_threadsafe(
-                self.set_wallpaper_async(image_path), loop
-            )
+            future = asyncio.run_coroutine_threadsafe(self.set_wallpaper_async(image_path), loop)
             # Use timeout to avoid blocking forever
             return future.result(timeout=30)
         except RuntimeError:
@@ -114,9 +111,20 @@ class WallpaperSetter:
     def get_current_wallpaper(self) -> str | None:
         if self.symlink_path.is_symlink():
             try:
-                target = self.symlink_path.resolve()
-                if target.exists():
-                    return str(target)
+                # Read the immediate target of the symlink without resolving recursively
+                target = os.readlink(self.symlink_path)
+                path = Path(target)
+
+                # Handle relative symlinks
+                if not path.is_absolute():
+                    path = self.symlink_path.parent / path
+
+                # Normalize path (handle ..) but DO NOT resolve symlinks
+                # This ensures we match what LocalService sees (which doesn't resolve symlinks)
+                full_path = Path(os.path.normpath(str(path)))
+
+                if full_path.exists():
+                    return str(full_path)
             except (OSError, RuntimeError) as e:
                 logger = logging.getLogger(__name__)
                 logger.debug(f"Could not resolve symlink {self.symlink_path}: {e}")

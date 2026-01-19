@@ -53,7 +53,8 @@ class LocalView(Adw.BreakpointBin):
         self._needs_full_rebuild = False
 
         # Pagination state
-        self._all_wallpapers = []
+        self._all_wallpapers = []  # Current view (may be filtered)
+        self._full_wallpapers = []  # Always contains all wallpapers
         self._visible_wallpapers = []
         self._current_page = 0
         self._is_loading_more = False
@@ -443,12 +444,12 @@ class LocalView(Adw.BreakpointBin):
 
         Returns True if the path was found, False otherwise.
         """
-        # Check if the wallpaper exists in our full list
-        if not any(str(wp.path) == target_path for wp in self._all_wallpapers):
+        # Check if the wallpaper exists in our full list (not filtered view)
+        if not any(str(wp.path) == target_path for wp in self._full_wallpapers):
             return False
 
         # Load more items until we find it or reach the end
-        max_iterations = len(self._all_wallpapers) // PAGE_SIZE + 5
+        max_iterations = len(self._full_wallpapers) // PAGE_SIZE + 5
         for _ in range(max_iterations):
             if target_path in self._path_card_map:
                 return True
@@ -526,6 +527,7 @@ class LocalView(Adw.BreakpointBin):
         """Handle wallpapers property change with pagination."""
         wallpapers = self.view_model.wallpapers
         self._all_wallpapers = wallpapers
+        self._full_wallpapers = wallpapers  # Keep full list for scroll-to-current
         self._visible_wallpapers = []
         self._current_page = 0
         self._has_more_items = len(wallpapers) > INITIAL_PAGE_SIZE

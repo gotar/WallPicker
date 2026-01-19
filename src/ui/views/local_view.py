@@ -463,11 +463,13 @@ class LocalView(Adw.BreakpointBin):
         vadj = self.scroll.get_vadjustment()
 
         # Use translate_coordinates to get card position relative to scroll window
-        success, card_x, card_y = card.translate_coordinates(self.scroll, 0, 0)
-        if not success:
+        result = card.translate_coordinates(self.scroll, 0, 0)
+        if result is None:
             # Fallback: try to get allocation
             allocation = card.get_allocation()
             card_y = allocation.y
+        else:
+            card_x, card_y = result
 
         card_height = card.get_allocated_height()
         scroll_height = vadj.get_page_size()

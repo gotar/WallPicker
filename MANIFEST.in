@@ -1,0 +1,7 @@
+include data/config.json
+include data/style.css
+include data/wallpaper-icon.svg
+include wallpicker.desktop
+include README.md
+include LICENSE
+include CHANGELOG.md

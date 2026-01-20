@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
  name = "wallpicker"
- version = "2.5.0"
+ version = "2.5.1"
  description = "Modern GTK4/Libadwaita wallpaper picker with Wallhaven integration"
 readme = "README.md"
 license = "MIT"
@@ -54,11 +54,14 @@ Homepage = "https://github.com/gotar/wallpicker"
 Repository = "https://github.com/gotar/wallpicker"
 Issues = "https://github.com/gotar/wallpicker/issues"
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-wallpicker = ["data/*"]
+"*" = ["*.json", "*.css", "*.svg"]
 
 [tool.ruff]
 line-length = 100

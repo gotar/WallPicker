@@ -10,12 +10,12 @@ class ToastService(GObject.Object):
         super().__init__()
         self.window = window
         self.overlay = Adw.ToastOverlay()
+        # Don't set content here - let the caller do it after UI is created
 
-        # Wrap existing content with toast overlay
-        existing_content = window.get_content()
-        if existing_content:
-            self.overlay.set_child(existing_content)
-        window.set_content(self.overlay)
+    def wrap_content(self, content):
+        """Wrap the given content widget with the toast overlay."""
+        self.overlay.set_child(content)
+        self.window.set_content(self.overlay)
 
     def show_success(self, message: str, undo_callback=None):
         """Show success toast with optional undo button."""

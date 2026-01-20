@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.5.0] - 2026-01-20
+## [2.5.3] - 2026-01-20
+
+### Fixed
+- **App startup crash**: Fixed critical bug causing app to hang on startup when `tagger_enabled: true`
+  - Root cause: ToastService was initialized with premature widget wrapping
+  - Solution: Refactored ToastService to use `wrap_content()` method called after UI creation
+  - Removed blocking auto-tagging on startup to prevent UI freeze
+  - Added TagStorageService caching for performance
+
+## [2.5.2] - 2026-01-20
 
 ### Added
 - **AI Image Tagging**: Automatic semantic tag generation for local wallpapers using CLIP (ViT-B/32)

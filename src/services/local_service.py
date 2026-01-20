@@ -68,8 +68,11 @@ class LocalWallpaper(GObject.Object):
         try:
             from services.tag_storage import TagStorageService
 
-            storage = TagStorageService()
-            self._tags = storage.get_tags(self.path)
+            # Cache the storage service instance to avoid recreating it for each wallpaper
+            if not hasattr(LocalWallpaper, "_tag_storage"):
+                LocalWallpaper._tag_storage = TagStorageService()
+
+            self._tags = LocalWallpaper._tag_storage.get_tags(self.path)
         except Exception:
             self._tags = []
 

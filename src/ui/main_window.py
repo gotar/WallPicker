@@ -296,7 +296,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
         self.toolbar_view.add_bottom_bar(self.banner_service.get_banner_widget())
 
         # Wrap toolbar view in toast overlay
-        self.toast_service.overlay.set_child(self.toolbar_view)
+        self.toast_service.wrap_content(self.toolbar_view)
 
         # Connect stack change signal
         self.stack.connect("notify::visible-child", self._on_tab_changed)

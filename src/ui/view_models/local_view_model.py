@@ -188,37 +188,11 @@ class LocalViewModel(BaseViewModel):
             self.search_query = ""
             self._set_wallpapers(wallpapers)
 
-            # Auto-generate tags for wallpapers that don't have them
-            schedule_async(self._queue_missing_tags_async())
-
         except Exception as e:
             self.error_message = f"Failed to load wallpapers: {e}"
             self._set_wallpapers([])
         finally:
             self.is_busy = False
-
-    async def _queue_missing_tags_async(self):
-        """Queue tag generation for all wallpapers missing tags."""
-        import os
-
-        if os.environ.get("WALLPICKER_TEST"):
-            return
-
-        try:
-            from services.tag_storage import TagStorageService
-
-            storage = TagStorageService()
-            untagged_count = 0
-
-            for wp in self._wallpapers:
-                if not storage.has_tags(wp.path):
-                    self.queue_generate_tags(wp)
-                    untagged_count += 1
-
-            if untagged_count > 0 and self.toast_service:
-                self.toast_service.show_info(f"Generating tags for {untagged_count} wallpapers...")
-        except Exception:
-            pass  # Silently fail - tags are non-critical
 
     async def search_wallpapers(self, query: str = "") -> None:
         try:

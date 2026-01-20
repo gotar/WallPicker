@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
+"""Launcher script for WallPicker."""
+
 import os
 import signal
 import sys
+import site
 from pathlib import Path
 
+# Add user site-packages to support pip --user installs
+user_site = site.getusersitepackages()
+if user_site not in sys.path:
+    sys.path.insert(0, user_site)
 
-def main() -> None:
-    project_dir = Path(__file__).parent
-    src_dir = project_dir / "src"
-    sys.path.insert(0, str(src_dir))
+# Add src to path for development
+project_dir = Path(__file__).parent
+src_dir = project_dir / "src"
+sys.path.insert(0, str(src_dir))
 
+
+def main():
     os.chdir(project_dir)
 
     import gi

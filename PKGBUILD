@@ -1,8 +1,8 @@
 # Maintainer: Gotar <gotar@users.noreply.github.com>
 pkgname=wallpicker
-pkgver=2.3.0
+pkgver=2.5.4
 pkgrel=1
-pkgdesc="Modern GTK4/Libadwaita wallpaper picker with Wallhaven integration and AI upscaling"
+pkgdesc="Modern GTK4/Libadwaita wallpaper picker with Wallhaven integration, AI upscaling, and AI tagging"
 arch=('any')
 url="https://github.com/gotar/WallPicker"
 license=('MIT')
@@ -19,8 +19,8 @@ depends=(
 )
 makedepends=('python-setuptools' 'python-wheel' 'python-build' 'python-installer')
 optdepends=('awww: Animated wallpaper transitions'
-            'waifu2x-ncnn-vulkan: AI upscaling for local wallpapers'
-            'clip-anytorch: AI image tagging for local wallpapers')
+             'waifu2x-ncnn-vulkan: AI upscaling for local wallpapers'
+             'python-pytorch: Required for AI image tagging (install clip-anytorch via pip)')
 source=("${pkgname}::git+https://github.com/gotar/WallPicker.git#tag=v${pkgver}")
 sha256sums=('SKIP')
 
@@ -44,10 +44,39 @@ package() {
   # Install CSS stylesheet
   install -Dm644 data/style.css "${pkgdir}/usr/share/wallpicker/style.css"
 
+  # Install default config
+  install -Dm644 data/config.json "${pkgdir}/usr/share/wallpicker/config.json"
+
   # Install documentation
   install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
   install -Dm644 CHANGELOG.md "${pkgdir}/usr/share/doc/${pkgname}/CHANGELOG.md"
 
   # Install license
   install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
+
+post_install() {
+  # Copy default config if user doesn't have one
+  if [ ! -f "$HOME/.config/wallpicker/config.json" ]; then
+    mkdir -p "$HOME/.config/wallpicker"
+    cp /usr/share/wallpicker/config.json "$HOME/.config/wallpicker/config.json"
+    echo "==> Created default config at ~/.config/wallpicker/config.json"
+  fi
+
+  echo ""
+  echo "==> WallPicker installed successfully!"
+  echo ""
+  echo "Optional features:"
+  echo "  • AI Image Tagging:"
+  echo "      python3 -m pip install --user clip-anytorch  # Install with system Python"
+  echo "      Edit ~/.config/wallpicker/config.json: \"tagger_enabled\": true"
+  echo ""
+  echo "  • AI Upscaling:"
+  echo "      Install waifu2x-ncnn-vulkan"
+  echo "      Edit ~/.config/wallpicker/config.json: \"upscaler_enabled\": true"
+  echo ""
+}
+
+post_upgrade() {
+  post_install
 }

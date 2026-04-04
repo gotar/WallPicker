@@ -1,0 +1,751 @@
+/* Modern CSS variables for consistent theming */
+:root {
+    /* Spacing scale (8-point system) */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+    --spacing-2xl: 32px;
+}
+
+/* Wallpaper Cards - Modern Card-Based UI */
+.wallpaper-card {
+    background-color: @card_bg_color;
+    border-radius: 12px;
+    border: 1px solid @borders;
+    padding: 8px;
+    margin: 0;
+    box-shadow: 0 2px 4px alpha(@window_fg_color, 0.1),
+                0 1px 2px alpha(@window_fg_color, 0.08);
+}
+
+.wallpaper-card:hover {
+    box-shadow: 0 6px 16px alpha(@window_fg_color, 0.15),
+                0 3px 6px alpha(@window_fg_color, 0.12);
+    border-color: alpha(@window_fg_color, 0.25);
+    background-color: alpha(@window_bg_color, 0.05);
+}
+
+.wallpaper-card.selected {
+    border: 2px solid @accent_bg_color;
+    background-color: alpha(@accent_bg_color, 0.08);
+    box-shadow: 0 0 0 4px alpha(@accent_bg_color, 0.2);
+}
+
+.wallpaper-card.current-wallpaper {
+    border: 2px solid @success_bg_color;
+    background-color: alpha(@success_bg_color, 0.08);
+    box-shadow: 0 0 0 4px alpha(@success_bg_color, 0.2);
+}
+
+/* Flash animation for wallpaper refresh */
+@keyframes flash-success {
+    0%, 100% {
+        background-color: @success_bg_color;
+        opacity: 0.3;
+    }
+    50% {
+        background-color: @success_bg_color;
+        opacity: 0.6;
+    }
+}
+
+.wallpaper-card.flash-animation {
+    animation: flash-success 0.2s ease-in-out 2;
+}
+
+/* Upscale blocking overlay */
+.upscale-overlay {
+    background-color: alpha(@window_bg_color, 0.9);
+    border-radius: 12px;
+    padding: 12px;
+    border: 1px solid alpha(@accent_bg_color, 0.3);
+}
+
+.upscale-overlay-small {
+    background-color: alpha(@window_bg_color, 0.9);
+    border-radius: 8px;
+    padding: 8px;
+    border: 1px solid alpha(@accent_bg_color, 0.3);
+}
+
+.upscale-overlay-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: @accent_color;
+    margin-top: 8px;
+}
+
+
+.wallpaper-card:focus:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 3px;
+}
+
+*:focus:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 3px;
+}
+
+.wallpaper-thumb {
+    border-radius: 8px;
+}
+
+.wallpaper-card .selection-checkbox {
+    min-width: 20px;
+    min-height: 20px;
+    margin: 8px;
+    background-color: alpha(@window_bg_color, 0.95);
+    border: 2px solid @window_fg_color;
+    border-radius: 4px;
+    opacity: 0;
+}
+
+.wallpaper-card.selection-mode .selection-checkbox {
+    opacity: 1;
+}
+
+.wallpaper-card .selection-checkbox:checked {
+    background-color: @accent_bg_color;
+    border-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+.wallpaper-card .selection-checkbox:hover {
+    background-color: alpha(@window_fg_color, 0.1);
+}
+
+.wallpaper-card overlay {
+    padding: var(--spacing-sm);
+}
+
+.wallpaper-card .card-info-box {
+    padding: 2px 8px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.wallpaper-card .card-actions-box {
+    padding: 2px 8px;
+    padding-bottom: 6px;
+}
+
+.wallpaper-card .filename-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: @window_fg_color;
+    min-height: 1.25rem;
+    line-height: 1.4;
+}
+
+.wallpaper-card .tags-label {
+    font-size: 0.6875rem;
+    font-weight: 400;
+    color: @accent_color;
+    min-height: 1rem;
+    line-height: 1.3;
+    margin-top: 2px;
+}
+
+.wallpaper-card .tags-label:hover {
+    color: shade(@accent_color, 1.2);
+}
+
+.wallpaper-card .caption {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: @dim_label_color;
+    min-height: 1.1rem;
+    line-height: 1.3;
+}
+
+/* Action Buttons - v1.1.1 Style */
+.action-button {
+    min-width: 24px;
+    min-height: 24px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 10px;
+    background: rgba(0, 0, 0, 0.1);
+    color: white;
+}
+
+.action-button:hover {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.action-button.suggested-action {
+    background: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+.action-button.suggested-action:hover {
+    background: shade(@accent_bg_color, 1.1);
+}
+
+/* Favorite button - yellow/orange */
+.action-button.favorite-action {
+    background: #f6c842;
+    color: #2a2a2a;
+}
+
+.action-button.favorite-action:hover {
+    background: #ffd666;
+}
+
+/* Download button - green */
+.action-button.download-action {
+    background: #2ec27e;
+    color: white;
+}
+
+.action-button.download-action:hover {
+    background: #33d17a;
+}
+
+/* Info button - gray */
+.action-button.info-action {
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.action-button.info-action:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.destructive-action {
+    background: #e51a4a;
+    color: white;
+}
+
+.destructive-action:hover {
+    background: #c0392b;
+}
+
+/* Error Display - v1.1.1 Style */
+.error {
+    color: #e51a4a;
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: rgba(249, 46, 46, 0.1);
+    margin: 12px;
+}
+
+
+/* Search Filter Bar */
+.search-filter-bar,
+.filter-bar {
+    padding: 12px 16px;
+    background: alpha(@window_bg_color, 0.8);
+    border-bottom: 1px solid alpha(@window_fg_color, 0.08);
+}
+
+.search-filter-bar Gtk.SearchEntry,
+.filter-bar Gtk.SearchEntry {
+    border-radius: 8px;
+    min-height: 36px;
+}
+
+.search-filter-bar Gtk.DropDown,
+.filter-bar Gtk.DropDown {
+    border-radius: 8px;
+    min-height: 36px;
+    min-width: 140px;
+}
+
+/* View Switcher Bar */
+.view-switcher-bar {
+    padding: 8px 16px;
+    background: alpha(@window_bg_color, 0.9);
+    border-top: 1px solid alpha(@window_fg_color, 0.06);
+}
+
+/* Toolbar Wrapper - consistent layout across all tabs */
+.toolbar-wrapper {
+    padding: 8px 12px;
+    background: alpha(@window_bg_color, 0.9);
+    border-bottom: 1px solid alpha(@window_fg_color, 0.06);
+}
+
+/* Filter Chips */
+.filter-chips {
+    padding: 8px 16px;
+    background: alpha(@window_bg_color, 0.9);
+    border-bottom: 1px solid alpha(@window_fg_color, 0.06);
+}
+
+.filter-chip {
+    background: alpha(@accent_bg_color, 0.15);
+    border: 1px solid alpha(@accent_bg_color, 0.3);
+    border-radius: 18px;
+    padding: 4px 12px;
+}
+
+.filter-chip:hover {
+    background: alpha(@accent_bg_color, 0.25);
+    border-color: alpha(@accent_bg_color, 0.5);
+}
+
+.filter-chip label {
+    font-size: 12px;
+    font-weight: 500;
+    color: @accent_color;
+}
+
+.filter-chip-remove {
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    margin: 0;
+    border-radius: 50%;
+    opacity: 0.7;
+}
+
+.filter-chip-remove:hover {
+    background: alpha(@destructive_bg_color, 0.2);
+    opacity: 1;
+}
+
+.filter-chip-remove image {
+    -gtk-icon-size: 14px;
+}
+
+/* Filter Panel */
+.filter-panel {
+    min-width: 320px;
+}
+
+.filter-panel .heading {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: @dim_label_color;
+    margin-bottom: 8px;
+}
+
+.filter-panel Gtk.CheckButton {
+    padding: 8px 12px;
+    border-radius: 6px;
+}
+
+.filter-panel Gtk.CheckButton:hover {
+    background: alpha(@window_fg_color, 0.05);
+}
+
+.filter-panel Gtk.DropDown {
+    margin-bottom: 12px;
+    border-radius: 8px;
+    min-height: 36px;
+}
+
+
+
+/* Status Bar - v1.1.1 Style */
+.status-bar {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    padding: 8px 12px;
+    background-color: @headerbar_bg_color;
+    border-top: 1px solid alpha(@window_fg_color, 0.08);
+}
+
+/* Status Page Styles */
+.status-page.compact {
+    padding: 24px;
+}
+
+.status-page image {
+    color: @dim_label_color;
+}
+
+
+
+.dark .wallpaper-card {
+    background-color: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .wallpaper-card:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark .wallpaper-card .filename-label {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.dark .wallpaper-card .caption {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+
+
+
+
+
+
+
+
+
+
+/* Banner Styles */
+.banner {
+    font-size: 13px;
+    border-radius: 0;
+    opacity: 0;
+}
+
+.banner.visible {
+    opacity: 1;
+}
+
+.banner.warning-banner {
+    background-color: alpha(@warning_color, 0.15);
+    color: @warning_fg_color;
+}
+
+.banner.warning-banner button {
+    background-color: @warning_bg_color;
+    color: @warning_fg_color;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.banner.warning-banner button:hover {
+    background-color: shade(@warning_bg_color, 1.1);
+}
+
+.banner.info-banner {
+    background-color: alpha(@info_color, 0.1);
+    color: @info_fg_color;
+}
+
+.banner.info-banner button {
+    background-color: alpha(@info_bg_color, 0.2);
+    color: @info_fg_color;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.banner.info-banner button:hover {
+    background-color: alpha(@info_bg_color, 0.3);
+}
+
+.banner.selection-banner {
+    background-color: alpha(@accent_bg_color, 0.1);
+    color: @accent_fg_color;
+}
+
+.banner.selection-banner button {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.banner.selection-banner button:hover {
+    background-color: shade(@accent_bg_color, 1.1);
+}
+
+
+/* Preview Dialog Styles */
+.preview-dialog {
+    min-width: 800px;
+    min-height: 600px;
+}
+
+.preview-image-container {
+    background: #000;
+    padding: 24px;
+}
+
+.preview-image {
+    border-radius: 8px;
+}
+
+.preview-image.loading {
+    opacity: 0.5;
+}
+
+.preview-sidebar {
+    min-width: 300px;
+    padding: 24px;
+}
+
+.preview-sidebar Adw.PreferencesGroup {
+}
+
+/* Large pill buttons */
+.pill {
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+
+
+/* Dark mode preview dialog */
+.dark .preview-image-container {
+    background: #1a1a1a;
+}
+
+
+.current-wallpaper-thumbnail:hover {
+    background: rgba(0, 0, 0, 0.15);
+    border-color: rgba(0, 0, 0, 0.25);
+}
+
+.current-thumb {
+    border-radius: 6px;
+}
+
+.current-thumb.thumbnail-updated {
+}
+
+.current-thumb.missing-thumb {
+    opacity: 0.5;
+    background: alpha(@warning_color, 0.1);
+}
+/* Touch-Friendly Button Sizes - Using smaller 24px size for better UX */
+
+/* Touch feedback for buttons */
+.action-button:active {
+}
+
+
+
+
+.refresh-spinner.active {
+    opacity: 1;
+}
+
+/* Touch feedback overlay */
+.touch-feedback {
+}
+
+.touch-feedback:active {
+    opacity: 0.8;
+}
+
+
+
+
+
+
+
+
+
+/* ============================================================================
+   ACCESSIBILITY: Focus Indicators
+   ============================================================================ */
+
+/* Strong, visible focus indicators for all interactive elements */
+*:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 3px;
+}
+
+/* Enhanced card focus indicator with shadow */
+.wallpaper-card:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 4px;
+    border-radius: 14px;
+}
+
+/* Button focus indicators */
+.action-button:focus-visible,
+button:focus-visible,
+Gtk.Button:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 2px;
+    border-radius: 8px;
+}
+
+/* Dropdown and entry focus */
+Gtk.DropDown:focus-visible,
+Gtk.Entry:focus-visible,
+Gtk.SearchEntry:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+/* Checkbox focus */
+.checkbutton:focus-visible,
+Gtk.CheckButton:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* ============================================================================
+   ACCESSIBILITY: High Contrast Theme Support
+   ============================================================================ */
+
+.high-contrast .wallpaper-card {
+    border: 2px solid @window_fg_color;
+    box-shadow: none;
+    background-color: @card_bg_color;
+}
+
+.high-contrast .wallpaper-card:hover {
+    border: 2px solid @window_fg_color;
+    background: alpha(@window_fg_color, 0.1);
+}
+
+.high-contrast .wallpaper-card:focus-visible {
+    outline: 3px solid @accent_bg_color;
+    background: alpha(@window_bg_color, 0.1);
+    border-color: @accent_bg_color;
+}
+
+.high-contrast .wallpaper-card.selected {
+    border: 3px solid @accent_bg_color;
+    box-shadow: none;
+    background-color: alpha(@accent_bg_color, 0.1);
+}
+
+.high-contrast .wallpaper-card .filename-label {
+    color: @window_fg_color;
+    font-weight: 600;
+}
+
+.high-contrast .wallpaper-card .caption {
+    color: @window_fg_color;
+}
+
+.high-contrast .action-button {
+    border: 2px solid @window_fg_color;
+}
+
+.high-contrast .action-button:hover {
+    border: 3px solid @window_fg_color;
+}
+
+.high-contrast .filter-chip {
+    border: 2px solid @window_fg_color;
+    background: @window_bg_color;
+}
+
+.high-contrast .filter-chip:hover {
+    border: 3px solid @accent_bg_color;
+}
+
+.high-contrast .caption,
+.high-contrast .filename-label,
+.high-contrast .dim-label {
+    color: @window_fg_color;
+}
+
+.high-contrast .banner {
+    border: 2px solid @window_fg_color;
+}
+
+.high-contrast .error {
+    border: 2px solid #e51a4a;
+}
+
+.high-contrast .preview-image-container {
+    border: 2px solid @window_fg_color;
+}
+
+/* ============================================================================
+   ACCESSIBILITY: Reduced Motion Support
+   ============================================================================ */
+
+/* GTK4 doesn't support @media (prefers-reduced-motion: reduce)
+   Reduced motion should be implemented in Python using Adw.Settings */
+
+/* ============================================================================
+   ACCESSIBILITY: Text Scaling Support
+   ============================================================================ */
+
+/* Use relative units that respect system font size */
+.wallpaper-card .filename-label {
+    font-size: 0.875rem;
+    min-height: 1.4rem;
+}
+
+.wallpaper-thumb {
+    /* Use system font for accessible sizing */
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body,
+window,
+application {
+    font-size: 1rem;
+}
+
+.caption,
+.dim-label,
+.label {
+    /* Ensure minimum font size for readability */
+    font-size: 0.875rem;
+    min-height: 1.2rem;
+    line-height: 1.4;
+}
+
+/* Larger text for headings */
+.heading,
+.category-label,
+.resolution-label {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+/* ============================================================================
+   ACCESSIBILITY: Color Contrast Improvements
+   ============================================================================ */
+
+/* Ensure text has sufficient contrast (WCAG AA: 4.5:1) */
+.error {
+    color: #e51a4a;
+    background: rgba(249, 46, 46, 0.15);
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin: 12px;
+}
+
+.dim-label {
+    opacity: 0.7;
+    color: @window_fg_color;
+}
+
+/* Interactive element indicators - min-height/min-width removed to use smaller button sizes */
+
+/* Ensure tooltips are readable */
+tooltip {
+    background: @popover_bg_color;
+    color: @popover_fg_color;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.875rem;
+}
+
+/* ============================================================================
+   KEYBOARD SHORTCUTS DIALOG
+   ============================================================================ */
+
+
+.shortcut-key {
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 13px;
+    color: @accent_color;
+    background: alpha(@accent_bg_color, 0.1);
+    padding: 4px 8px;
+    border-radius: 4px;
+}

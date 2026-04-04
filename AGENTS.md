@@ -6,7 +6,7 @@
 ## OVERVIEW
 Wallpaper picker with multi-source support (Wallhaven API + local files). Features a modern MVVM architecture, async operations, dependency injection, and comprehensive testing.
 
-**Phase 2 Complete:** AI upscaling with waifu2x, concurrent queue processing, resolution sorting, and single-card refresh.
+**Phase 2 Complete:** AI upscaling with waifu2x, AI tagging with CLIP models, concurrent queue processing, resolution sorting, and single-card refresh.
 
 ## STRUCTURE
 ```
@@ -37,6 +37,7 @@ Wallpaper picker with multi-source support (Wallhaven API + local files). Featur
 | **Status Page** | `src/ui/components/status_page.py` | Reusable loading/empty/error states |
 | **Views** | `src/ui/views/` | GTK widgets that bind to ViewModels |
 | **AI Upscaler** | `src/ui/view_models/local_view_model.py` | waifu2x-ncnn-vulkan integration with queue |
+| **AI Tagger** | `src/services/tag_generation.py` | CLIP-based image tagging with clip-anytorch/clip-cpp |
 
 ## ARCHITECTURE CONVENTIONS
 
@@ -60,6 +61,13 @@ Wallpaper picker with multi-source support (Wallhaven API + local files). Featur
 - Visual feedback: blocking overlay with spinner, flash animation on complete
 - Auto-refresh of thumbnail and metadata (resolution/size)
 - Image verification before replacement, backup on failure
+
+### AI Tagging (v2.5.3)
+- Config option `tagger_enabled` in `~/.config/wallpicker/config.json`
+- Uses CLIP models via clip-anytorch (Python) or clip-cpp (C++ binary)
+- Supports concurrent tagging with queue system
+- Tags are cached persistently and displayed on wallpaper cards
+- Fallback detection: prefers clip-anytorch, falls back to clip-cpp if available
 
 ### Async Operations
 - Network and file I/O use `async`/`await`.

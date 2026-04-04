@@ -300,7 +300,9 @@ class TestLocalViewModelFiltering:
         )
         wp3._resolution = "2560x1080"
 
-        result = local_view_model._apply_aspect_filter([wp1, wp2, wp3], {"ratios": "16x9"})
+        result = local_view_model._apply_aspect_filter(
+            [wp1, wp2, wp3], {"ratios": "16x9"}
+        )
 
         filenames = [w.filename for w in result]
         assert "wide.jpg" in filenames

@@ -3,8 +3,8 @@
 
 import os
 import signal
-import sys
 import site
+import sys
 from pathlib import Path
 
 # Add user site-packages to support pip --user installs

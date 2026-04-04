@@ -2,10 +2,9 @@
 Tests for WallpaperSetter service
 """
 
-import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -100,13 +99,15 @@ class TestSetWallpaper:
             setter = WallpaperSetter()
 
             # Mock the methods
-            mock_daemon = MagicMock()
+            mock_daemon = AsyncMock()
             mock_update = MagicMock()
-            mock_apply = MagicMock()
+            mock_save_original_path = MagicMock()
+            mock_apply = AsyncMock()
             mock_cleanup = MagicMock()
 
             setter._ensure_daemon_running = mock_daemon
             setter._update_symlink = mock_update
+            setter._save_original_path = mock_save_original_path
             setter._apply_wallpaper = mock_apply
             setter._cleanup_old_wallpapers = mock_cleanup
 
@@ -115,6 +116,7 @@ class TestSetWallpaper:
             # Check all methods were called
             assert mock_daemon.called
             assert mock_update.called
+            assert mock_save_original_path.called
             assert mock_apply.called
             assert mock_cleanup.called
 
@@ -127,61 +129,88 @@ class TestEnsureDaemonRunning:
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
-        # Mock pgrep to find daemon running
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        with patch("subprocess.run", return_value=mock_result):
-            # _ensure_daemon_running is now async, run it in event loop
+        mock_pgrep = AsyncMock()
+        mock_pgrep.returncode = 0
+        mock_pgrep.communicate = AsyncMock(return_value=(b"", b""))
+
+        with patch(
+            "asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_pgrep)
+        ) as mock_exec:
             import asyncio
 
             asyncio.run(setter._ensure_daemon_running())
 
-            # pgrep should be called
-            subprocess.run.assert_called_once()
+            mock_exec.assert_called_once_with(
+                "pgrep",
+                "-x",
+                "awww-daemon",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
 
     def test_ensure_daemon_not_running(self):
         """Test when daemon is not running"""
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
-        # Mock pgrep to not find daemon
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        with patch("subprocess.run", return_value=mock_result) as mock_run:
-            with patch("subprocess.Popen") as mock_popen:
-                with patch("time.sleep") as mock_sleep:
-                    import asyncio
+        mock_pgrep = AsyncMock()
+        mock_pgrep.returncode = 1
+        mock_pgrep.communicate = AsyncMock(return_value=(b"", b""))
 
-                    asyncio.run(setter._ensure_daemon_running())
+        mock_daemon = AsyncMock()
+        mock_daemon.communicate = AsyncMock(return_value=(b"", b""))
 
-                    # pgrep should be called
-                    mock_run.assert_called_once()
-                    # daemon should be started
-                    mock_popen.assert_called_once()
-                    # should sleep for daemon to start
-                    mock_sleep.assert_called_once_with(1)
+        with patch(
+            "asyncio.create_subprocess_exec",
+            new=AsyncMock(side_effect=[mock_pgrep, mock_daemon]),
+        ) as mock_exec:
+            with patch("asyncio.sleep", new=AsyncMock()) as mock_sleep:
+                import asyncio
+
+                asyncio.run(setter._ensure_daemon_running())
+
+                assert mock_exec.call_count == 2
+                assert mock_exec.call_args_list == [
+                    call(
+                        "pgrep",
+                        "-x",
+                        "awww-daemon",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    ),
+                    call(
+                        "awww-daemon",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    ),
+                ]
+                mock_sleep.assert_awaited_once_with(1)
 
     def test_ensure_daemon_pgrep_args(self):
         """Test that pgrep is called with correct arguments"""
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
-        mock_result = MagicMock()
-        mock_result.returncode = 1
+        mock_pgrep = AsyncMock()
+        mock_pgrep.returncode = 1
+        mock_pgrep.communicate = AsyncMock(return_value=(b"", b""))
 
-        with patch("subprocess.run", return_value=mock_result) as mock_run:
-            with patch("subprocess.Popen"):
-                with patch("time.sleep"):
-                    import asyncio
+        mock_daemon = AsyncMock()
+        mock_daemon.communicate = AsyncMock(return_value=(b"", b""))
 
-                    asyncio.run(setter._ensure_daemon_running())
+        with patch(
+            "asyncio.create_subprocess_exec",
+            new=AsyncMock(side_effect=[mock_pgrep, mock_daemon]),
+        ) as mock_exec:
+            with patch("asyncio.sleep", new=AsyncMock()):
+                import asyncio
 
-                    # Check pgrep arguments
-                    call_args = mock_run.call_args
-                    cmd = call_args[0][0]
-                    assert cmd[0] == "pgrep"
-                    assert "-x" in cmd
-                    assert "awww-daemon" in cmd
+                asyncio.run(setter._ensure_daemon_running())
+
+                first_call = mock_exec.call_args_list[0]
+                assert first_call.args[0] == "pgrep"
+                assert "-x" in first_call.args
+                assert "awww-daemon" in first_call.args
 
 
 class TestUpdateSymlink:
@@ -254,14 +283,20 @@ class TestApplyWallpaper:
 
         test_path = Path("/test/wallpaper.jpg")
 
-        with patch("subprocess.run") as mock_run:
+        mock_process = AsyncMock()
+        mock_process.returncode = 0
+        mock_process.communicate = AsyncMock(return_value=(b"", b""))
+
+        with patch(
+            "asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)
+        ) as mock_exec:
             import asyncio
 
             asyncio.run(setter._apply_wallpaper(test_path))
 
             # Check awww command arguments
-            call_args = mock_run.call_args
-            cmd = call_args[0][0]
+            call_args = mock_exec.call_args
+            cmd = call_args.args
 
             assert cmd[0] == "awww"
             assert "img" in cmd
@@ -276,21 +311,24 @@ class TestApplyWallpaper:
             assert "--transition-bezier" in cmd
             assert ".43,1.19,1,.4" in cmd
 
-    def test_apply_wallpaper_with_check(self):
-        """Test that command is run with check=True"""
+    def test_apply_wallpaper_raises_on_non_zero_exit(self):
+        """Test that non-zero exit status raises RuntimeError"""
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
         test_path = Path("/test/wallpaper.jpg")
 
-        with patch("subprocess.run") as mock_run:
+        mock_process = AsyncMock()
+        mock_process.returncode = 1
+        mock_process.communicate = AsyncMock(return_value=(b"", b"awww failed"))
+
+        with patch(
+            "asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)
+        ):
             import asyncio
 
-            asyncio.run(setter._apply_wallpaper(test_path))
-
-            # Check that check=True is passed
-            call_kwargs = mock_run.call_args[1]
-            assert call_kwargs["check"] is True
+            with pytest.raises(RuntimeError, match="awww failed"):
+                asyncio.run(setter._apply_wallpaper(test_path))
 
 
 class TestCleanupOldWallpapers:

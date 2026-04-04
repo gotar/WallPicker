@@ -27,9 +27,13 @@ class Config:
             if not isinstance(self.local_wallpapers_dir, Path):
                 raise ConfigError("local_wallpapers_dir must be a Path object")
             if not self.local_wallpapers_dir.exists():
-                raise ConfigError(f"Directory does not exist: {self.local_wallpapers_dir}")
+                raise ConfigError(
+                    f"Directory does not exist: {self.local_wallpapers_dir}"
+                )
             if not self.local_wallpapers_dir.is_dir():
-                raise ConfigError(f"Path is not a directory: {self.local_wallpapers_dir}")
+                raise ConfigError(
+                    f"Path is not a directory: {self.local_wallpapers_dir}"
+                )
 
     @property
     def pictures_dir(self) -> Path:
@@ -65,10 +69,14 @@ class Config:
             else None
         )
         api_key = api_key_value if isinstance(api_key_value, str) else None
-        notifications = notifications_value if isinstance(notifications_value, bool) else True
+        notifications = (
+            notifications_value if isinstance(notifications_value, bool) else True
+        )
         upscaler = upscaler_value if isinstance(upscaler_value, bool) else False
         tagger = tagger_value if isinstance(tagger_value, bool) else False
-        last_wallpaper = last_wallpaper_value if isinstance(last_wallpaper_value, str) else None
+        last_wallpaper = (
+            last_wallpaper_value if isinstance(last_wallpaper_value, str) else None
+        )
 
         return cls(
             local_wallpapers_dir=local_dir,

@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import logging
 from pathlib import Path
 
 from services.base import BaseService
@@ -53,14 +52,16 @@ class TagStorageService(BaseService):
             return []
 
         try:
-            with open(tag_file, "r") as f:
+            with open(tag_file) as f:
                 data = json.load(f)
             return data.get("tags", [])
         except (json.JSONDecodeError, OSError) as e:
             self.log_warning(f"Failed to load tags for {image_path}: {e}")
             return []
 
-    def save_tags(self, image_path: Path, tags: list[str], confidence: dict | None = None) -> bool:
+    def save_tags(
+        self, image_path: Path, tags: list[str], confidence: dict | None = None
+    ) -> bool:
         """Save tags for an image.
 
         Args:
@@ -101,7 +102,7 @@ class TagStorageService(BaseService):
             return [], {}
 
         try:
-            with open(tag_file, "r") as f:
+            with open(tag_file) as f:
                 data = json.load(f)
             return data.get("tags", []), data.get("confidence", {})
         except (json.JSONDecodeError, OSError) as e:

@@ -68,7 +68,8 @@ class TagGenerationService(BaseService):
             return self._clip_cpp_available
         # Check for clip-cpp binary
         self._clip_cpp_available = (
-            shutil.which("clip-cpp") is not None or shutil.which("image-search") is not None
+            shutil.which("clip-cpp") is not None
+            or shutil.which("image-search") is not None
         )
         return self._clip_cpp_available
 
@@ -176,10 +177,14 @@ class TagGenerationService(BaseService):
                     image_features /= image_features.norm(dim=-1, keepdim=True)
                     text_features /= text_features.norm(dim=-1, keepdim=True)
 
-                    similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
+                    similarity = (100.0 * image_features @ text_features.T).softmax(
+                        dim=-1
+                    )
                     values, indices = similarity[0].topk(len(common_tags))
 
-                results = {common_tags[idx]: float(values[i]) for i, idx in enumerate(indices)}
+                results = {
+                    common_tags[idx]: float(values[i]) for i, idx in enumerate(indices)
+                }
                 return results
 
             results = await asyncio.to_thread(run_model)
@@ -212,7 +217,7 @@ class TagGenerationService(BaseService):
     async def _generate_clip_cpp(self, image_path: Path) -> tuple[list[str], dict]:
         """Generate tags using clip-cpp CLI.
 
-        Uses the image-search tool with predefined tags.
+        Uses clip-cpp with ggml model for image-text similarity.
 
         Args:
             image_path: Path to the image file
@@ -220,6 +225,8 @@ class TagGenerationService(BaseService):
         Returns:
             Tuple of (tags list, confidence dict)
         """
+        model_path = "/usr/share/clip-cpp/models/ViT-L-14-336px.ggml"
+
         # Predefined tag categories for clip-cpp
         common_tags = [
             "nature",
@@ -273,14 +280,16 @@ class TagGenerationService(BaseService):
         ]
 
         try:
-            # Build the query string
-            query = " ".join(f'"{tag}"' for tag in common_tags)
+            # Build the query string with | separator
+            query = "|".join(common_tags)
 
             proc = await asyncio.create_subprocess_exec(
-                "image-search",
-                "-q",
-                query,
+                "clip-cpp",
+                "-m",
+                model_path,
+                "--image",
                 str(image_path),
+                query,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -295,7 +304,7 @@ class TagGenerationService(BaseService):
 
         except FileNotFoundError:
             self._clip_cpp_available = False
-            raise TagGenerationError("clip-cpp/image-search not found in PATH") from None
+            raise TagGenerationError("clip-cpp not found in PATH") from None
 
     def _parse_clip_cpp_output(self, output: str) -> tuple[list[str], dict]:
         """Parse clip-cpp/image-search output.

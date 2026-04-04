@@ -6,7 +6,7 @@ from gi.repository import Adw, Gtk
 from ui.components.adaptive_layout import AdaptiveLayoutMixin
 
 
-class TestView(Adw.BreakpointBin, AdaptiveLayoutMixin):
+class AdaptiveTestView(Adw.BreakpointBin, AdaptiveLayoutMixin):
     """Test view with adaptive layout mixin."""
 
     def __init__(self):
@@ -18,7 +18,7 @@ class TestView(Adw.BreakpointBin, AdaptiveLayoutMixin):
 @pytest.fixture
 def test_view():
     """Create a test view with adaptive layout."""
-    view = TestView()
+    view = AdaptiveTestView()
 
     # Create a flow box for testing
     flow_box = Gtk.FlowBox()
@@ -33,7 +33,7 @@ def test_view():
 @pytest.fixture
 def test_view_with_filter():
     """Create a test view with filter bar."""
-    view = TestView()
+    view = AdaptiveTestView()
 
     # Create filter bar
     filter_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)

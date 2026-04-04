@@ -1,6 +1,5 @@
 """Tests for ThumbnailCache."""
 
-import asyncio
 import time
 from pathlib import Path
 
@@ -206,30 +205,27 @@ class TestDownloadAndCache:
             await cache.download_and_cache(url, aiohttp_session)
 
     @pytest.mark.asyncio
-    async def test_download_calls_cleanup(
-        self, tmp_path: Path, aiohttp_session, mocker: MockerFixture
-    ):
+    async def test_download_calls_cleanup(self, tmp_path: Path, mocker: MockerFixture):
         """Test download_and_cache calls cleanup."""
+        from aiohttp import ClientError
+
         cache = ThumbnailCache(cache_dir=tmp_path)
         url = "http://example.com/image.jpg"
 
         cleanup_mock = mocker.patch.object(cache, "cleanup", return_value=0)
 
-        from aiohttp import ClientResponse
+        mock_response = mocker.MagicMock()
+        mock_response.raise_for_status.side_effect = ClientError("Network error")
 
-        mock_response = mocker.Mock(spec=ClientResponse)
-        mock_response.status = 200
-        mock_response.headers = {"content-length": "1000"}
-        mock_response.raise_for_status = mocker.Mock()
-        mock_response.read.return_value = b"data"
-        aiohttp_session.get.side_effect = lambda *args, **kwargs: (
-            asyncio.Future()
-            if asyncio.iscoroutinefunction(mock_response)
-            else mock_response
-        )
+        mock_context = mocker.MagicMock()
+        mock_context.__aenter__ = mocker.AsyncMock(return_value=mock_response)
+        mock_context.__aexit__ = mocker.AsyncMock(return_value=False)
 
-        with pytest.raises(Exception):  # noqa: B017
-            await cache.download_and_cache(url, aiohttp_session)
+        mock_session = mocker.MagicMock(spec=aiohttp.ClientSession)
+        mock_session.get.return_value = mock_context
+
+        with pytest.raises(ServiceError):
+            await cache.download_and_cache(url, mock_session)
 
         cleanup_mock.assert_called_once()
 

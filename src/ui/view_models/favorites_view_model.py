@@ -14,7 +14,10 @@ from gi.repository import GLib, GObject  # type: ignore
 from core.asyncio_integration import get_event_loop, schedule_async
 from domain.favorite import Favorite
 from domain.wallpaper import (
+    Resolution,
     Wallpaper,  # noqa: E402
+    WallpaperPurity,
+    WallpaperSource,
 )
 from services.config_service import ConfigService
 from services.favorites_service import FavoritesService
@@ -105,7 +108,23 @@ class FavoritesViewModel(BaseViewModel):
                 results = await asyncio.to_thread(
                     self.favorites_service.search_favorites, query
                 )
-                GLib.idle_add(self._set_favorites, results)
+
+                if results and isinstance(results[0], Favorite):
+                    matched_favorites = results
+                else:
+                    all_favorites = await asyncio.to_thread(
+                        self.favorites_service.get_favorites
+                    )
+                    favorites_by_id = {
+                        favorite.wallpaper_id: favorite for favorite in all_favorites
+                    }
+                    matched_favorites = [
+                        favorites_by_id[wallpaper.id]
+                        for wallpaper in results
+                        if wallpaper.id in favorites_by_id
+                    ]
+
+                GLib.idle_add(self._set_favorites, matched_favorites)
 
         except Exception as e:
             self.error_message = f"Failed to search favorites: {e}"
@@ -138,13 +157,59 @@ class FavoritesViewModel(BaseViewModel):
             logger.error(f"Failed to add favorite synchronously: {e}")
             return False
 
-    async def remove_favorite(self, wallpaper_id: str) -> bool:
+    async def add_favorite(
+        self,
+        wallpaper_id: str,
+        full_url: str,
+        path: str,
+        source: str,
+        tags: str,
+    ) -> bool:
         try:
             self.is_busy = True
             self.error_message = None
 
+            try:
+                wallpaper_source = WallpaperSource(source)
+            except ValueError:
+                wallpaper_source = WallpaperSource.LOCAL
+
+            wallpaper = Wallpaper(
+                id=wallpaper_id,
+                url=full_url,
+                path=path,
+                resolution=Resolution(0, 0),
+                source=wallpaper_source,
+                category="favorites",
+                purity=WallpaperPurity.SFW,
+                tags=[tag.strip() for tag in tags.split(",") if tag.strip()],
+            )
+
+            await asyncio.to_thread(self.favorites_service.add_favorite, wallpaper)
+            schedule_async(self.load_favorites())
+            self._show_toast("Added to favorites", "success")
+            return True
+
+        except Exception as e:
+            self.error_message = f"Failed to add favorite: {e}"
+            self._show_toast(f"Failed to add favorite: {e}", "error")
+            return False
+        finally:
+            self.is_busy = False
+
+    async def remove_favorite(self, wallpaper_id: str | Favorite) -> bool:
+        try:
+            self.is_busy = True
+            self.error_message = None
+
+            target_wallpaper_id = (
+                wallpaper_id.wallpaper_id
+                if isinstance(wallpaper_id, Favorite)
+                else wallpaper_id
+            )
+
             await asyncio.to_thread(
-                self.favorites_service.remove_favorite, wallpaper_id
+                self.favorites_service.remove_favorite, target_wallpaper_id
             )
             schedule_async(self.load_favorites())
             self._show_toast("Removed from favorites", "success")

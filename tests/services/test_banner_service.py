@@ -350,7 +350,8 @@ class TestCleanup:
         banner_service._dismiss_timeout = 12345
         banner_service.is_visible = True
 
-        banner_service.cleanup()
+        with patch("services.banner_service.GLib.source_remove"):
+            banner_service.cleanup()
 
         assert len(banner_service._banner_queue) == 0
         assert banner_service._dismiss_timeout is None

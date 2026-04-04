@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 @pytest.fixture
 def mock_local_service(tmp_path, mocker):
     """Mock LocalWallpaperService for ViewModel tests."""
-    from services.local_service import LocalWallpaper, LocalWallpaperService
+    from services.local_service import LocalWallpaper
 
     # Create some mock wallpapers
     wallpapers = [

@@ -3,7 +3,11 @@
 from collections.abc import Callable
 from enum import IntEnum, auto
 
-from gi.repository import Adw, GLib, GObject
+import gi
+
+gi.require_version("Adw", "1")
+
+from gi.repository import Adw, GLib, GObject  # noqa: E402
 
 
 class BannerPriority(IntEnum):

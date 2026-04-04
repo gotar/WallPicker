@@ -173,7 +173,9 @@ class LocalView(Adw.BreakpointBin):
         toolbar_wrapper.add_css_class("toolbar-wrapper")
         self.main_box.append(toolbar_wrapper)
 
-        folder_btn = Gtk.Button(icon_name="folder-symbolic", tooltip_text="Choose folder")
+        folder_btn = Gtk.Button(
+            icon_name="folder-symbolic", tooltip_text="Choose folder"
+        )
         folder_btn.connect("clicked", self._on_folder_clicked)
         toolbar_wrapper.append(folder_btn)
 
@@ -482,7 +484,9 @@ class LocalView(Adw.BreakpointBin):
         target_filename = Path(target_path).name
 
         has_match = any(str(wp.path) == target_path for wp in self._full_wallpapers)
-        has_filename_match = any(wp.path.name == target_filename for wp in self._full_wallpapers)
+        has_filename_match = any(
+            wp.path.name == target_filename for wp in self._full_wallpapers
+        )
 
         if not has_match and not has_filename_match:
             return False
@@ -737,14 +741,18 @@ class LocalView(Adw.BreakpointBin):
         actions_box.add_css_class("card-actions-box")
         actions_box.set_halign(Gtk.Align.CENTER)
 
-        set_btn = Gtk.Button(icon_name="image-x-generic-symbolic", tooltip_text="Set as wallpaper")
+        set_btn = Gtk.Button(
+            icon_name="image-x-generic-symbolic", tooltip_text="Set as wallpaper"
+        )
         set_btn.add_css_class("action-button")
         set_btn.add_css_class("suggested-action")
         set_btn.set_cursor_from_name("pointer")
         set_btn.connect("clicked", self._on_set_wallpaper, wallpaper)
         actions_box.append(set_btn)
 
-        fav_btn = Gtk.Button(icon_name="starred-symbolic", tooltip_text="Add to favorites")
+        fav_btn = Gtk.Button(
+            icon_name="starred-symbolic", tooltip_text="Add to favorites"
+        )
         fav_btn.add_css_class("action-button")
         fav_btn.add_css_class("favorite-action")
         fav_btn.set_cursor_from_name("pointer")
@@ -760,18 +768,23 @@ class LocalView(Adw.BreakpointBin):
 
         # Show upscale button only if enabled in config
         if self._is_upscaler_enabled():
-            upscale_btn = Gtk.Button(icon_name="zoom-in-symbolic", tooltip_text="Upscale 2x (AI)")
+            upscale_btn = Gtk.Button(
+                icon_name="zoom-in-symbolic", tooltip_text="Upscale 2x (AI)"
+            )
             upscale_btn.add_css_class("action-button")
             upscale_btn.set_cursor_from_name("pointer")
             upscale_btn.connect("clicked", self._on_upscale_wallpaper, wallpaper)
             actions_box.append(upscale_btn)
 
-        # Show tag button
-        tag_btn = Gtk.Button(icon_name="tag-symbolic", tooltip_text="Generate AI tags")
-        tag_btn.add_css_class("action-button")
-        tag_btn.set_cursor_from_name("pointer")
-        tag_btn.connect("clicked", self._on_generate_tags, wallpaper)
-        actions_box.append(tag_btn)
+        # Show tag button only if enabled in config
+        if self._is_tagger_enabled():
+            tag_btn = Gtk.Button(
+                icon_name="tag-symbolic", tooltip_text="Generate AI tags"
+            )
+            tag_btn.add_css_class("action-button")
+            tag_btn.set_cursor_from_name("pointer")
+            tag_btn.connect("clicked", self._on_generate_tags, wallpaper)
+            actions_box.append(tag_btn)
 
         card.append(actions_box)
         return card
@@ -782,6 +795,13 @@ class LocalView(Adw.BreakpointBin):
             return False
         config = self.config_service.get_config()
         return config.upscaler_enabled if config else False
+
+    def _is_tagger_enabled(self) -> bool:
+        """Returns True if tagger is enabled in config."""
+        if not self.config_service:
+            return False
+        config = self.config_service.get_config()
+        return config.tagger_enabled if config else False
 
     def _on_card_clicked(self, gesture, n_press, x, y, wallpaper):
         if n_press == 2:
@@ -916,7 +936,9 @@ class LocalView(Adw.BreakpointBin):
         if image_overlay:
             image_overlay.remove_overlay(overlay)
 
-    def _on_tagging_complete(self, view_model, success: bool, message: str, wallpaper_path: str):
+    def _on_tagging_complete(
+        self, view_model, success: bool, message: str, wallpaper_path: str
+    ):
         """Handle tagging completion."""
         if success:
             if self.toast_service:
@@ -996,7 +1018,9 @@ class LocalView(Adw.BreakpointBin):
         if image_overlay:
             image_overlay.remove_overlay(overlay)
 
-    def _on_upscale_complete(self, view_model, success: bool, message: str, wallpaper_path: str):
+    def _on_upscale_complete(
+        self, view_model, success: bool, message: str, wallpaper_path: str
+    ):
         """Handle upscaling completion."""
         if success:
             if self.toast_service:
@@ -1056,7 +1080,9 @@ class LocalView(Adw.BreakpointBin):
                 image.set_paintable(texture)
 
         if self.thumbnail_loader:
-            self.thumbnail_loader.load_thumbnail_async(str(wallpaper.path), on_thumbnail_loaded)
+            self.thumbnail_loader.load_thumbnail_async(
+                str(wallpaper.path), on_thumbnail_loaded
+            )
 
         # Add flash effect
         card.add_css_class("flash-animation")

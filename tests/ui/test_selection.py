@@ -43,11 +43,12 @@ class TestSelection:
         assert wallpaper not in selected
         assert local_view_model.selected_count == 0
 
-    def test_select_all_selects_all_wallpapers(
+    @pytest.mark.asyncio
+    async def test_select_all_selects_all_wallpapers(
         self, local_view_model, mock_local_service
     ):
         """Test select all selects all wallpapers."""
-        local_view_model.load_wallpapers()
+        await local_view_model.load_wallpapers()
 
         local_view_model.select_all()
 
@@ -55,9 +56,12 @@ class TestSelection:
         assert len(selected) == len(local_view_model.wallpapers)
         assert local_view_model.selected_count == len(local_view_model.wallpapers)
 
-    def test_deselect_all_clears_selection(self, local_view_model, mock_local_service):
+    @pytest.mark.asyncio
+    async def test_deselect_all_clears_selection(
+        self, local_view_model, mock_local_service
+    ):
         """Test deselect all clears selection."""
-        local_view_model.load_wallpapers()
+        await local_view_model.load_wallpapers()
         local_view_model.select_all()
 
         local_view_model.deselect_all()
@@ -66,11 +70,12 @@ class TestSelection:
         assert len(selected) == 0
         assert local_view_model.selected_count == 0
 
-    def test_clear_selection_exits_selection_mode(
+    @pytest.mark.asyncio
+    async def test_clear_selection_exits_selection_mode(
         self, local_view_model, mock_local_service
     ):
         """Test clear selection deselects and exits selection mode."""
-        local_view_model.load_wallpapers()
+        await local_view_model.load_wallpapers()
         local_view_model.select_all()
 
         local_view_model.clear_selection()
@@ -164,9 +169,10 @@ class TestWallhavenViewModelSelection:
 class TestFavoritesViewModelSelection:
     """Test selection functionality in FavoritesViewModel."""
 
-    def test_favorites_selection_with_favorites(self, favorites_view_model):
+    @pytest.mark.asyncio
+    async def test_favorites_selection_with_favorites(self, favorites_view_model):
         """Test selection works with favorites."""
-        favorites_view_model.load_favorites()
+        await favorites_view_model.load_favorites()
 
         favorites = favorites_view_model.favorites
         if favorites:

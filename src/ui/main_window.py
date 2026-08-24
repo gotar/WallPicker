@@ -629,17 +629,14 @@ def main():
     # launcher.py), so logging must be configured here as well.
     setup_logging()
 
-    # Handle standard options before GTK takes over argv.
-    if "-v" in sys.argv[1:] or "--version" in sys.argv[1:]:
-        from services.cli import _version
+    # Single-binary dispatch: with a CLI command (set/current/-v/-h) run
+    # headless; without one, launch the GUI.
+    from services.cli import wants_cli
 
-        print(f"wallpicker {_version()}")
-        return
-    if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
-        from services.cli import _gui_usage
+    if wants_cli(sys.argv[1:]):
+        from services.cli import main as cli_main
 
-        print(_gui_usage())
-        return
+        sys.exit(cli_main(sys.argv[1:]))
 
     setup_event_loop()
 

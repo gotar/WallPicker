@@ -95,10 +95,43 @@ class TestVersionAndHelp:
         rc = main(["--help"])
         assert rc == 0
         out = capsys.readouterr().out
-        assert "Launch the WallPicker GUI" in out
+        assert "GUI launches" in out
         assert "--version" in out
 
     def test_no_args_exits_1_with_help(self, capsys, setter_cls):
         rc = main([])
         assert rc == 1
         assert "Usage" in capsys.readouterr().out
+
+
+class TestWantsCli:
+    def test_no_args_launches_gui(self):
+        from services.cli import wants_cli
+
+        assert wants_cli([]) is False
+
+    def test_debug_only_launches_gui(self):
+        from services.cli import wants_cli
+
+        assert wants_cli(["--debug"]) is False
+
+    def test_set_routes_to_cli(self):
+        from services.cli import wants_cli
+
+        assert wants_cli(["set", "/tmp/x.jpg"]) is True
+        assert wants_cli(["--debug", "set", "/tmp/x.jpg"]) is True
+
+    def test_current_and_flags_route_to_cli(self):
+        from services.cli import wants_cli
+
+        assert wants_cli(["current"]) is True
+        assert wants_cli(["-v"]) is True
+        assert wants_cli(["--version"]) is True
+        assert wants_cli(["-h"]) is True
+        assert wants_cli(["--help"]) is True
+
+    def test_unknown_first_arg_launches_gui(self):
+        """Anything unrecognized stays GUI (GTK handles its own errors)."""
+        from services.cli import wants_cli
+
+        assert wants_cli(["--frobnicate"]) is False

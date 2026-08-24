@@ -61,13 +61,28 @@ def _version() -> str:
 def _gui_usage() -> str:
     return (
         "Usage:\n"
-        "  wallpicker [options]          Launch the WallPicker GUI\n\n"
+        "  wallpicker [command] [options]\n\n"
+        "Without a command the WallPicker GUI launches. Commands:\n"
+        "  set <image-path>              Set the desktop wallpaper and exit\n"
+        "  current                       Print current wallpaper path and exit\n\n"
         "Options:\n"
         "  -h, --help                    Show this help and exit\n"
         "  -v, --version                 Show version and exit\n"
-        "  --debug                       Enable debug logging\n\n"
-        + __doc__.strip()
+        "  --debug                       Enable debug logging (GUI)\n"
     )
+
+
+CLI_COMMANDS = frozenset({"set", "current", "-v", "--version", "-h", "--help"})
+
+
+def wants_cli(args: list[str]) -> bool:
+    """True when argv should be handled headless instead of launching the GUI.
+
+    `--debug` is GUI-only and ignored for this decision; any other leading
+    CLI command routes to the headless handler.
+    """
+    rest = [a for a in args if a != "--debug"]
+    return bool(rest) and rest[0] in CLI_COMMANDS
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -75,9 +90,13 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     setup_logging()
 
-    if not args or "-h" in args or "--help" in args:
+    if not args:
         print(_gui_usage())
-        return 0 if args else 1
+        return 1
+
+    if "-h" in args or "--help" in args:
+        print(_gui_usage())
+        return 0
 
     if "-v" in args or "--version" in args:
         print(f"wallpicker {_version()}")

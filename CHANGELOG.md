@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.7] - 2026-08-24
+
+### Fixed
+- Setting a wallpaper now visibly applies it on systems where an awww
+  daemon is already running: the daemon owns the top wallpaper layer and is
+  updated with the new image after the omarchy background symlink/IPC step
+  (previously the old image stayed on screen). A daemon is never spawned —
+  without one the shell renders the background.
+- UnboundLocalError in wallpaper-setter error paths (function-local logger
+  shadowing)
+
 ## [2.5.6] - 2026-08-24
 
 ### Fixed

@@ -623,7 +623,11 @@ def main():
     import sys
 
     from core.asyncio_integration import setup_event_loop
+    from core.logging_setup import setup_logging
 
+    # The packaged /usr/bin/wallpicker imports this module directly (not
+    # launcher.py), so logging must be configured here as well.
+    setup_logging()
     setup_event_loop()
 
     debug = "--debug" in sys.argv

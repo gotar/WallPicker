@@ -51,6 +51,7 @@ dev = [
 
 [project.scripts]
 wallpicker = "ui.main_window:main"
+wallpicker-cli = "services.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/gotar/wallpicker"

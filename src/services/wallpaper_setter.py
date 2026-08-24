@@ -1,15 +1,23 @@
 import asyncio
 import logging
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
 from core.asyncio_integration import get_event_loop
 
+logger = logging.getLogger(__name__)
+
 
 class WallpaperSetter:
     def __init__(self):
         self.cache_dir = Path.home() / ".cache" / "wallpaper"
+        # Canonical location read by the omarchy shell (Background.qml).
+        self.state_link_path = (
+            Path.home() / ".local" / "state" / "omarchy" / "current" / "background"
+        )
+        # Legacy location kept in sync for backwards compatibility.
         self.symlink_path = (
             Path.home() / ".config" / "omarchy" / "current" / "background"
         )
@@ -40,8 +48,20 @@ class WallpaperSetter:
             return False
 
         try:
+            # Preferred integration: let omarchy update its canonical state
+            # symlink and notify the running shell over IPC. This keeps the
+            # desktop background single-sourced (the shell renders it), so we
+            # must NOT additionally draw via awww on top of it.
+            if await self._apply_via_omarchy(path):
+                self._save_original_path(path)
+                await asyncio.to_thread(self._cleanup_old_wallpapers)
+                return True
+
+            # Fallback for non-omarchy setups: drive awww directly and point
+            # both symlinks (canonical state link first) at the image.
             await self._ensure_daemon_running()
-            self._update_symlink(path)
+            self._atomic_symlink(self.state_link_path, path)
+            self._atomic_symlink(self.symlink_path, path)
             self._save_original_path(path)
             await self._apply_wallpaper(path)
             await asyncio.to_thread(self._cleanup_old_wallpapers)
@@ -72,11 +92,52 @@ class WallpaperSetter:
             )
             await asyncio.sleep(1)
 
-    def _update_symlink(self, path: Path):
-        if self.symlink_path.is_symlink():
-            self.symlink_path.unlink()
+    async def _apply_via_omarchy(self, path: Path) -> bool:
+        """Apply via omarchy-theme-bg-set; False if unavailable or failed."""
+        if shutil.which("omarchy-theme-bg-set") is None:
+            return False
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "omarchy-theme-bg-set",
+                str(path),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _stdout, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=20
+            )
+        except TimeoutError:
+            process.kill()
+            await process.communicate()
+            logger.warning("omarchy-theme-bg-set timed out")
+            return False
+        if process.returncode != 0:
+            stderr_text = stderr.decode("utf-8", errors="replace").strip()
+            logger.warning(
+                "omarchy-theme-bg-set failed: %s", stderr_text or "unknown error"
+            )
+            return False
+        # Keep the legacy link in sync so scripts still reading the old
+        # location keep working.
+        try:
+            self._atomic_symlink(self.symlink_path, path)
+        except OSError:
+            logger.debug("Could not update legacy background symlink", exc_info=True)
+        return True
 
-        self.symlink_path.symlink_to(path)
+    @staticmethod
+    def _atomic_symlink(link_path: Path, target: Path):
+        """Atomically point link_path at target (tmp symlink + os.replace)."""
+        link_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_link = link_path.with_name(f".{link_path.name}.tmp{os.getpid()}")
+        try:
+            if tmp_link.is_symlink() or tmp_link.exists():
+                tmp_link.unlink()
+            tmp_link.symlink_to(target)
+            os.replace(tmp_link, link_path)
+        except OSError:
+            tmp_link.unlink(missing_ok=True)
+            raise
 
     def _save_original_path(self, path: Path):
         try:
@@ -130,10 +191,17 @@ class WallpaperSetter:
             except OSError:
                 pass
 
-        if self.symlink_path.is_symlink():
+        for link in (self.state_link_path, self.symlink_path):
+            resolved = self._read_link_target(link)
+            if resolved is not None:
+                return resolved
+        return None
+
+    def _read_link_target(self, symlink_path: Path) -> str | None:
+        if symlink_path.is_symlink():
             try:
                 # Read the immediate target of the symlink without resolving recursively
-                target = os.readlink(self.symlink_path)
+                target = os.readlink(symlink_path)
                 path = Path(target)
 
                 # Handle relative symlinks
@@ -146,7 +214,8 @@ class WallpaperSetter:
 
                 if full_path.exists():
                     return str(full_path)
-            except (OSError, RuntimeError) as e:
-                logger = logging.getLogger(__name__)
-                logger.debug(f"Could not resolve symlink {self.symlink_path}: {e}")
+            except (OSError, RuntimeError):
+                logger.debug(
+                    f"Could not resolve symlink {symlink_path}", exc_info=True
+                )
         return None

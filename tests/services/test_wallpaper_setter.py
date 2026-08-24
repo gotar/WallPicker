@@ -51,22 +51,34 @@ class TestSetWallpaper:
         test_file.write_bytes(b"test image data")
         return str(test_file)
 
-    def test_set_wallpaper_success(self, test_image_path):
-        """Test successful wallpaper setting"""
+    def _make_omarchy_available(self, setter, return_value=True):
+        """Patch the setter to run through the omarchy integration path."""
+        patcher = patch.object(
+            setter, "_apply_via_omarchy", new=AsyncMock(return_value=return_value)
+        )
+        patcher.start()
+        return patcher
+
+    def test_set_wallpaper_success_via_omarchy(self, test_image_path):
+        """Successful omarchy integration must not draw via awww on top"""
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
-            with patch.object(setter, "_ensure_daemon_running"):
-                with patch.object(setter, "_update_symlink"):
-                    with patch.object(setter, "_apply_wallpaper"):
-                        with patch.object(setter, "_cleanup_old_wallpapers"):
-                            result = setter.set_wallpaper(test_image_path)
+            self._make_omarchy_available(setter, True)
+            setter._ensure_daemon_running = AsyncMock()
+            setter._apply_wallpaper = AsyncMock()
+            setter._save_original_path = MagicMock()
+            setter._cleanup_old_wallpapers = MagicMock()
 
-                            assert result is True
-                            setter._ensure_daemon_running.assert_called_once()
-                            setter._update_symlink.assert_called_once()
-                            setter._apply_wallpaper.assert_called_once()
-                            setter._cleanup_old_wallpapers.assert_called_once()
+            result = setter.set_wallpaper(test_image_path)
+
+            assert result is True
+            setter._apply_via_omarchy.assert_awaited_once()
+            # awww must not double-draw over the shell-rendered background
+            setter._ensure_daemon_running.assert_not_called()
+            setter._apply_wallpaper.assert_not_called()
+            setter._save_original_path.assert_called_once()
+            setter._cleanup_old_wallpapers.assert_called_once()
 
     def test_set_wallpaper_non_existent_path(self):
         """Test setting wallpaper with non-existent path"""
@@ -79,46 +91,59 @@ class TestSetWallpaper:
             assert result is False
 
     def test_set_wallpaper_exception(self, test_image_path):
-        """Test that exceptions are caught and return False"""
+        """Exceptions on the fallback path are caught and return False"""
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
-            with patch.object(setter, "_ensure_daemon_running"):
-                with patch.object(setter, "_update_symlink"):
-                    with patch.object(
-                        setter, "_apply_wallpaper", side_effect=Exception("Test error")
-                    ):
-                        result = setter.set_wallpaper(test_image_path)
+            self._make_omarchy_available(setter, False)
+            with patch.object(
+                setter,
+                "_ensure_daemon_running",
+                new=AsyncMock(side_effect=RuntimeError("no daemon")),
+            ):
+                result = setter.set_wallpaper(test_image_path)
 
-                        # Should return False on exception
-                        assert result is False
+                # Should return False on exception
+                assert result is False
 
     def test_set_wallpaper_calls_in_order(self, test_image_path):
-        """Test that methods are called in correct order"""
+        """Fallback path order: daemon -> symlinks -> original -> apply"""
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
-            # Mock the methods
-            mock_daemon = AsyncMock()
-            mock_update = MagicMock()
-            mock_save_original_path = MagicMock()
-            mock_apply = AsyncMock()
-            mock_cleanup = MagicMock()
+            call_order = []
 
-            setter._ensure_daemon_running = mock_daemon
-            setter._update_symlink = mock_update
-            setter._save_original_path = mock_save_original_path
-            setter._apply_wallpaper = mock_apply
-            setter._cleanup_old_wallpapers = mock_cleanup
+            async def fake_daemon():
+                call_order.append("daemon")
 
-            setter.set_wallpaper(test_image_path)
+            async def fake_omarchy(_):
+                call_order.append("omarchy")
+                return False
 
-            # Check all methods were called
-            assert mock_daemon.called
-            assert mock_update.called
-            assert mock_save_original_path.called
-            assert mock_apply.called
-            assert mock_cleanup.called
+            def fake_symlink(link, _target):
+                call_order.append(
+                    "state_link" if link == setter.state_link_path else "legacy_link"
+                )
+
+            async def fake_apply(_):
+                call_order.append("apply")
+
+            setter._ensure_daemon_running = fake_daemon
+            setter._apply_via_omarchy = fake_omarchy
+            setter._atomic_symlink = fake_symlink
+            setter._save_original_path = lambda *_: call_order.append("save")
+            setter._apply_wallpaper = fake_apply
+            setter._cleanup_old_wallpapers = MagicMock()
+
+            assert setter.set_wallpaper(test_image_path) is True
+            assert call_order == [
+                "omarchy",
+                "daemon",
+                "state_link",
+                "legacy_link",
+                "save",
+                "apply",
+            ]
 
 
 class TestEnsureDaemonRunning:
@@ -213,64 +238,119 @@ class TestEnsureDaemonRunning:
                 assert "awww-daemon" in first_call.args
 
 
-class TestUpdateSymlink:
-    """Test _update_symlink method"""
+class TestAtomicSymlink:
+    """Test _atomic_symlink helper (tmp link + os.replace swap)"""
 
-    def test_update_symlink_new(self, tmp_path):
-        """Test updating symlink when none exists"""
-        with patch("pathlib.Path.home", return_value=tmp_path):
+    def test_atomic_symlink_new(self, tmp_path):
+        """Creating a symlink where none exists"""
+        test_image = tmp_path / "wallpaper.jpg"
+        test_image.write_bytes(b"test")
+        link = tmp_path / "current" / "background"
+
+        WallpaperSetter._atomic_symlink(link, test_image)
+
+        assert link.is_symlink()
+        assert link.resolve() == test_image
+
+    def test_atomic_symlink_replaces_existing(self, tmp_path):
+        """Existing symlink (or regular file) is replaced atomically"""
+        old_target = tmp_path / "old.jpg"
+        old_target.write_bytes(b"old")
+        new_target = tmp_path / "new.jpg"
+        new_target.write_bytes(b"new")
+        link = tmp_path / "background"
+        link.symlink_to(old_target)
+
+        WallpaperSetter._atomic_symlink(link, new_target)
+
+        assert link.resolve() == new_target
+
+    def test_atomic_symlink_replaces_regular_file(self, tmp_path):
+        """A regular file at the link position does not raise FileExistsError"""
+        target = tmp_path / "wp.jpg"
+        target.write_bytes(b"x")
+        link = tmp_path / "background"
+        link.write_text("not a symlink")
+
+        WallpaperSetter._atomic_symlink(link, target)
+
+        assert link.is_symlink()
+        assert link.resolve() == target
+
+    def test_atomic_symlink_leaves_no_tmp_files(self, tmp_path):
+        """No .tmp leftovers on success"""
+        target = tmp_path / "wp.jpg"
+        target.write_bytes(b"x")
+        link_dir = tmp_path / "d"
+        link = link_dir / "background"
+
+        WallpaperSetter._atomic_symlink(link, target)
+
+        assert list(link_dir.glob("*.tmp*")) == []
+
+
+class TestApplyViaOmarchy:
+    """Test the omarchy-theme-bg-set integration path"""
+
+    def _make_process(self, returncode=0, stderr=b""):
+        proc = AsyncMock()
+        proc.returncode = returncode
+        proc.communicate = AsyncMock(return_value=(b"", stderr))
+        return proc
+
+    async def test_uses_omarchy_theme_bg_set(self, tmp_path):
+        image = tmp_path / "wp.jpg"
+        image.write_bytes(b"x")
+        with patch("pathlib.Path.home"):
+            setter = WallpaperSetter()
+        setter.symlink_path = tmp_path / "legacy" / "background"
+        setter.state_link_path = tmp_path / "state" / "background"
+
+        with patch("shutil.which", return_value="/usr/bin/omarchy-theme-bg-set"):
+            with patch(
+                "asyncio.create_subprocess_exec",
+                new=AsyncMock(return_value=self._make_process(0)),
+            ) as mock_exec:
+                result = await setter._apply_via_omarchy(image)
+
+        assert result is True
+        args = mock_exec.call_args.args
+        assert args[0] == "omarchy-theme-bg-set"
+        assert args[1] == str(image)
+        # legacy link kept in sync for old consumers
+        assert setter.symlink_path.is_symlink()
+        assert setter.symlink_path.resolve() == image
+
+    async def test_returns_false_when_command_missing(self, tmp_path):
+        image = tmp_path / "wp.jpg"
+        image.write_bytes(b"x")
+        with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
-            test_image = tmp_path / "wallpaper.jpg"
-            test_image.write_bytes(b"test")
+        with patch("shutil.which", return_value=None):
+            result = await setter._apply_via_omarchy(image)
 
-            setter._update_symlink(test_image)
+        assert result is False
 
-            assert setter.symlink_path.is_symlink()
-            assert setter.symlink_path.resolve() == test_image
-
-    def test_update_symlink_existing(self, tmp_path):
-        """Test updating symlink when one already exists"""
-        with patch("pathlib.Path.home", return_value=tmp_path):
+    async def test_returns_false_on_non_zero_exit(self, tmp_path):
+        image = tmp_path / "wp.jpg"
+        image.write_bytes(b"x")
+        with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
+        setter.symlink_path = tmp_path / "legacy" / "background"
 
-            # Create existing symlink
-            old_target = tmp_path / "old.jpg"
-            old_target.write_bytes(b"old")
-            setter.symlink_path.symlink_to(old_target)
+        with patch("shutil.which", return_value="/usr/bin/omarchy-theme-bg-set"):
+            with patch(
+                "asyncio.create_subprocess_exec",
+                new=AsyncMock(
+                    return_value=self._make_process(1, stderr=b"boom")
+                ),
+            ):
+                result = await setter._apply_via_omarchy(image)
 
-            # Create new target
-            new_target = tmp_path / "new.jpg"
-            new_target.write_bytes(b"new")
-
-            setter._update_symlink(new_target)
-
-            # Old symlink should be replaced
-            assert setter.symlink_path.resolve() == new_target
-
-    def test_update_symlink_unlinks_old(self, tmp_path):
-        """Test that old symlink is unlinked before creating new"""
-        with patch("pathlib.Path.home", return_value=tmp_path):
-            setter = WallpaperSetter()
-
-            # Create existing symlink
-            old_target = tmp_path / "old.jpg"
-            old_target.write_bytes(b"old")
-            setter.symlink_path.symlink_to(old_target)
-
-            # Verify old symlink exists
-            assert setter.symlink_path.is_symlink()
-            assert setter.symlink_path.resolve() == old_target
-
-            # Update to new target
-            new_target = tmp_path / "new.jpg"
-            new_target.write_bytes(b"new")
-
-            setter._update_symlink(new_target)
-
-            # New symlink should point to new target
-            assert setter.symlink_path.is_symlink()
-            assert setter.symlink_path.resolve() == new_target
+        assert result is False
+        # legacy link must not be touched on failure
+        assert not setter.symlink_path.exists()
 
 
 class TestApplyWallpaper:
@@ -464,6 +544,7 @@ class TestSetWallpaperAsyncFailurePaths:
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
+        with patch.object(setter, "_apply_via_omarchy", new=AsyncMock(return_value=False)):
             with patch.object(
                 setter,
                 "_ensure_daemon_running",
@@ -478,6 +559,7 @@ class TestSetWallpaperAsyncFailurePaths:
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
+        with patch.object(setter, "_apply_via_omarchy", new=AsyncMock(return_value=False)):
             with patch.object(setter, "_ensure_daemon_running", new=AsyncMock()):
                 with patch.object(
                     setter,
@@ -511,10 +593,11 @@ class TestSetWallpaperAsyncFailurePaths:
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
+        with patch.object(setter, "_apply_via_omarchy", new=AsyncMock(return_value=False)):
             with patch.object(setter, "_ensure_daemon_running", new=AsyncMock()):
                 with patch.object(
                     setter,
-                    "_update_symlink",
+                    "_atomic_symlink",
                     side_effect=OSError("read-only file system"),
                 ):
                     import asyncio

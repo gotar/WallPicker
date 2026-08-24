@@ -32,6 +32,17 @@ class SearchFilterBar(Gtk.Box):
 
     __gtype_name__ = "SearchFilterBar"
 
+    # Backend filter key -> human-readable chip label (M10)
+    FILTER_LABELS = {
+        "sort": "Sort",
+        "category": "Category",
+        "purity": "Purity",
+        "resolution": "Min Resolution",
+        "top_range": "Top Range",
+        "ratios": "Aspect Ratio",
+        "colors": "Color",
+    }
+
     def __init__(
         self,
         tab_type: str = "wallhaven",

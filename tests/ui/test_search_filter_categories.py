@@ -64,7 +64,7 @@ class TestCategoryBitmask:
         remove_btn = None
         child = bar._chips_container.get_first_child()
         while child:
-            if getattr(child, "_filter_type", None) == "Category":
+            if getattr(child, "_filter_type", None) == "category":
                 remove_btn = child.get_last_child()
                 break
             child = child.get_next_sibling()

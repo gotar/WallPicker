@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
  name = "wallpicker"
- version = "2.5.7"
+ version = "2.5.8"
  description = "Modern GTK4/Libadwaita wallpaper picker with Wallhaven integration"
 readme = "README.md"
 license = "MIT"

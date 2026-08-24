@@ -172,9 +172,10 @@ class SearchFilterBar(Gtk.Box):
         self.category_anime = Gtk.CheckButton(label="Anime")
         self.category_people = Gtk.CheckButton(label="People")
 
-        # Group checkboxes together (group second and third with first)
-        self.category_anime.set_group(self.category_sfw)
-        self.category_people.set_group(self.category_sfw)
+        # M9: categories are a bitmask (General/Anime/People) and must NOT be
+        # radio-grouped - grouping made multi-select impossible.
+        # Default to General checked to match the previous visible default.
+        self.category_sfw.set_active(True)
 
         category_box.append(self.category_sfw)
         category_box.append(self.category_anime)
@@ -390,32 +391,39 @@ class SearchFilterBar(Gtk.Box):
         return value
 
     def _on_category_toggled(self, button: Gtk.CheckButton):
-        """Handle category checkbox toggle (Wallhaven only)."""
-        if button.get_active():
-            # Remove old category chip if exists
-            self._remove_filter_chip_by_type("category")
+        """Handle category checkbox toggle as a bitmask (Wallhaven only).
 
-            # Determine category code
-            if button == self.category_sfw:
-                code = "100"
-                name = "General"
-            elif button == self.category_anime:
-                code = "010"
-                name = "Anime"
-            elif button == self.category_people:
-                code = "001"
-                name = "People"
-            else:
-                code = "111"
-                name = "All"
+        Bits accumulate across the independent checkboxes (M9): e.g.
+        General+Anime -> "110". With nothing selected the filter is removed
+        so the backend default applies.
+        """
+        checks = (self.category_sfw, self.category_anime, self.category_people)
+        names = {id(self.category_sfw): "General",
+                 id(self.category_anime): "Anime",
+                 id(self.category_people): "People"}
 
-            self._active_filters["category"] = code
-            self._add_filter_chip("category", name)
+        bits = "".join("1" if cb.get_active() else "0" for cb in checks)
+
+        # Remove old category chip if exists
+        self._remove_filter_chip_by_type("category")
+
+        if bits == "000":
+            # No category selected: drop the filter entirely
+            if "category" in self._active_filters:
+                del self._active_filters["category"]
 
             if self._on_filter_changed_callback:
                 self._on_filter_changed_callback(self._active_filters)
+            return
 
-            self.filter_popover.popdown()
+        active_names = [
+            names[id(cb)] for cb in checks if cb.get_active()
+        ]
+        self._active_filters["category"] = bits
+        self._add_filter_chip("category", "+".join(active_names))
+
+        if self._on_filter_changed_callback:
+            self._on_filter_changed_callback(self._active_filters)
 
     def _on_purity_toggled(self, button: Gtk.CheckButton):
         """Handle purity checkbox toggle (Wallhaven only)."""
@@ -461,7 +469,6 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
-        self.filter_popover.popdown()
 
     def _on_resolution_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
         """Handle resolution dropdown change."""
@@ -481,7 +488,6 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
-        self.filter_popover.popdown()
 
     def _on_top_range_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
         selected = dropdown.get_selected()
@@ -500,7 +506,6 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
-        self.filter_popover.popdown()
 
     def _on_aspect_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
         """Handle aspect ratio dropdown change (Wallhaven only)."""
@@ -520,7 +525,6 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
-        self.filter_popover.popdown()
 
     def _on_color_changed(self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec):
         """Handle color dropdown change (Wallhaven only)."""
@@ -554,7 +558,6 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
-        self.filter_popover.popdown()
 
     def _on_local_resolution_changed(
         self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec
@@ -575,7 +578,6 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
-        self.filter_popover.popdown()
 
     def _on_local_aspect_changed(
         self, dropdown: Gtk.DropDown, pspec: GObject.ParamSpec
@@ -596,7 +598,6 @@ class SearchFilterBar(Gtk.Box):
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
-        self.filter_popover.popdown()
 
     def _add_filter_chip(self, filter_key: str, display_value: str):
         """Add a filter chip to the chips container.
@@ -672,8 +673,9 @@ class SearchFilterBar(Gtk.Box):
             if filter_key == "sort":
                 self.sort_dropdown.set_selected(Gtk.INVALID_LIST_POSITION)
             elif filter_key == "category" and self.tab_type == "wallhaven":
-                # Reset to General (default)
-                self.category_sfw.set_active(True)
+                # Clear all category checkboxes (bitmask mode, M9); toggling
+                # handlers will remove the filter from _active_filters.
+                self.category_sfw.set_active(False)
                 self.category_anime.set_active(False)
                 self.category_people.set_active(False)
             elif filter_key == "purity" and self.tab_type == "wallhaven":
@@ -753,8 +755,8 @@ class SearchFilterBar(Gtk.Box):
         self.search_entry.set_text("")
 
         if self.tab_type == "wallhaven":
-            # Reset category to General
-            self.category_sfw.set_active(True)
+            # Clear category checkboxes (bitmask multi-select, M9)
+            self.category_sfw.set_active(False)
             self.category_anime.set_active(False)
             self.category_people.set_active(False)
 

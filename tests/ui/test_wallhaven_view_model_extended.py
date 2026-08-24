@@ -416,3 +416,36 @@ class TestAddToFavoritesAsync:
         assert ok is False
         assert "Failed to add to favorites: disk full" == message
         assert "disk full" in wh_vm.error_message
+
+
+async def test_set_wallpaper_emits_downloaded_signal(
+    wh_vm, mock_wallhaven_service, dl_config
+):
+    """Setting from Wallhaven must announce the download so the Local tab
+    refreshes (regression: signal was only emitted by download-only path)."""
+    received = []
+    wh_vm.connect("wallpaper-downloaded", lambda vm, path: received.append(path))
+
+    mock_wallhaven_service.download = AsyncMock(side_effect=_true_async)
+    wh_vm.wallpaper_setter.set_wallpaper_async = AsyncMock(side_effect=_true_async)
+
+    ok, _ = await wh_vm.set_wallpaper_async(make_wallpaper(wallpaper_id="wh_new"))
+
+    assert ok is True
+    assert len(received) == 1
+    expected = str(dl_config.get_config.return_value.local_wallpapers_dir)
+    assert received[0].startswith(expected)
+
+
+async def test_set_wallpaper_no_signal_on_download_failure(
+    wh_vm, mock_wallhaven_service
+):
+    received = []
+    wh_vm.connect("wallpaper-downloaded", lambda vm, path: received.append(path))
+    mock_wallhaven_service.download = AsyncMock(side_effect=_false_async)
+    wh_vm.wallpaper_setter.set_wallpaper_async = AsyncMock(side_effect=_true_async)
+
+    ok, _ = await wh_vm.set_wallpaper_async(make_wallpaper())
+
+    assert ok is False
+    assert received == []

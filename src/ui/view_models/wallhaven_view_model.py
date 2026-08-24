@@ -403,6 +403,9 @@ class WallhavenViewModel(BaseViewModel):
             if not local_path:
                 return False, "Failed to download wallpaper"
 
+            # Announce the download so the Local tab can refresh.
+            self._emit_idle("wallpaper-downloaded", local_path)
+
             success = await self.wallpaper_setter.set_wallpaper_async(local_path)
             if success:
                 return True, "Wallpaper set successfully"
@@ -449,6 +452,10 @@ class WallhavenViewModel(BaseViewModel):
             local_path = await self.download_wallpaper(wallpaper)
             if not local_path:
                 return False, "Failed to download wallpaper"
+
+            # Announce the download even on the set-from-Wallhaven flow so
+            # listeners (Local tab refresh) pick up the new file.
+            self._emit_idle("wallpaper-downloaded", local_path)
 
             success = await self.wallpaper_setter.set_wallpaper_async(local_path)
             if success:

@@ -49,14 +49,39 @@ def _current() -> int:
     return 1
 
 
+def _version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("wallpicker")
+    except Exception:
+        return "unknown"
+
+
+def _gui_usage() -> str:
+    return (
+        "Usage:\n"
+        "  wallpicker [options]          Launch the WallPicker GUI\n\n"
+        "Options:\n"
+        "  -h, --help                    Show this help and exit\n"
+        "  -v, --version                 Show version and exit\n"
+        "  --debug                       Enable debug logging\n\n"
+        + __doc__.strip()
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: `wallpicker-cli <command> ...`."""
     args = list(sys.argv[1:] if argv is None else argv)
     setup_logging()
 
-    if not args or args[0] in ("-h", "--help"):
-        print(__doc__.strip())
+    if not args or "-h" in args or "--help" in args:
+        print(_gui_usage())
         return 0 if args else 1
+
+    if "-v" in args or "--version" in args:
+        print(f"wallpicker {_version()}")
+        return 0
 
     command, *rest = args
     if command == "set" and len(rest) == 1:

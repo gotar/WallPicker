@@ -77,3 +77,28 @@ class TestCli:
 
         assert rc == 0
         mock_run.assert_called_once()
+
+
+class TestVersionAndHelp:
+    def test_version_flag(self, capsys, setter_cls):
+        rc = main(["--version"])
+        assert rc == 0
+        assert "wallpicker" in capsys.readouterr().out
+
+    def test_short_version_flag(self, capsys, setter_cls):
+        rc = main(["-v"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert out.strip().startswith("wallpicker ")
+
+    def test_help_flag_shows_gui_usage(self, capsys, setter_cls):
+        rc = main(["--help"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Launch the WallPicker GUI" in out
+        assert "--version" in out
+
+    def test_no_args_exits_1_with_help(self, capsys, setter_cls):
+        rc = main([])
+        assert rc == 1
+        assert "Usage" in capsys.readouterr().out

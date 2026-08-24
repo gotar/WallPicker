@@ -628,6 +628,19 @@ def main():
     # The packaged /usr/bin/wallpicker imports this module directly (not
     # launcher.py), so logging must be configured here as well.
     setup_logging()
+
+    # Handle standard options before GTK takes over argv.
+    if "-v" in sys.argv[1:] or "--version" in sys.argv[1:]:
+        from services.cli import _version
+
+        print(f"wallpicker {_version()}")
+        return
+    if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
+        from services.cli import _gui_usage
+
+        print(_gui_usage())
+        return
+
     setup_event_loop()
 
     debug = "--debug" in sys.argv

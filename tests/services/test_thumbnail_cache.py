@@ -250,3 +250,55 @@ class TestGetOrDownload:
         result = await cache.get_or_download(url, session)
         assert result == cache_path
         assert not session.get.called
+
+
+class TestCleanupRobustness:
+    """Test cleanup robustness against concurrent file deletion (TOCTOU)."""
+
+    def test_cleanup_tolerates_vanished_files(self, tmp_path: Path):
+        """Test cleanup does not raise when files vanish between glob and stat."""
+        cache = ThumbnailCache(cache_dir=tmp_path)
+
+        # A dangling symlink makes stat() raise FileNotFoundError, simulating
+        # a file deleted by another worker thread between glob() and stat().
+        dangling = tmp_path / "vanished.jpg"
+        dangling.symlink_to(tmp_path / "does-not-exist.jpg")
+        (tmp_path / "real.jpg").write_bytes(b"x" * 1000)
+
+        removed = cache.cleanup()
+        assert isinstance(removed, int)
+
+
+class TestAtomicCacheWrite:
+    """Test that cache entries are written atomically."""
+
+    @pytest.mark.asyncio
+    async def test_download_leaves_no_tmp_files(
+        self, tmp_path: Path, mocker: MockerFixture
+    ):
+        """Test successful download writes atomically (no .tmp leftovers)."""
+        import aiohttp as aiohttp_mod
+
+        cache = ThumbnailCache(cache_dir=tmp_path)
+        url = "http://example.com/image.jpg"
+        image_data = b"fake image bytes"
+
+        mocker.patch.object(cache, "cleanup", return_value=0)
+        mock_response = mocker.MagicMock()
+        mock_response.raise_for_status = mocker.MagicMock()
+
+        async def read():
+            return image_data
+
+        mock_response.read = read
+        mock_context = mocker.MagicMock()
+        mock_context.__aenter__ = mocker.AsyncMock(return_value=mock_response)
+        mock_context.__aexit__ = mocker.AsyncMock(return_value=False)
+
+        mock_session = mocker.MagicMock(spec=aiohttp_mod.ClientSession)
+        mock_session.get.return_value = mock_context
+
+        result = await cache.download_and_cache(url, mock_session)
+
+        assert result.read_bytes() == image_data
+        assert not list(tmp_path.glob("*.tmp"))

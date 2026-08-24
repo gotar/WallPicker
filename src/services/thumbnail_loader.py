@@ -4,6 +4,7 @@ This service handles the GTK-specific thumbnail loading logic that was
 previously in BaseViewModel, properly separating concerns.
 """
 
+import hashlib
 import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -47,12 +48,14 @@ class ThumbnailLoader:
 
     def _get_local_thumbnail_path(self, file_path: str) -> Path:
         """Get the path for a local thumbnail file."""
-        # Use file path hash for cache key
+        # Use stable MD5 of the path as cache key (builtin hash() is salted per
+        # process, which would invalidate the disk cache on every restart).
         path = Path(file_path)
         cache_key = f"{path.stat().st_mtime}_{path.stat().st_size}"
+        path_hash = hashlib.md5(str(file_path).encode()).hexdigest()
         return (
             _THUMBNAIL_CACHE_DIR
-            / f"local_{hash(file_path) & 0xFFFFFFFF:08x}_{cache_key}.jpg"
+            / f"local_{path_hash}_{cache_key}.jpg"
         )
 
     def _generate_thumbnail(self, file_path: str) -> bytes | None:

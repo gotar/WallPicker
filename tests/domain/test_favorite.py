@@ -112,3 +112,37 @@ def test_favorite_from_dict_with_wallpaper_class():
     assert favorite.wallpaper_id == "fav1"
     assert favorite.wallpaper.category == "anime"
     assert favorite.wallpaper.source == WallpaperSource.WALLHAVEN
+
+
+def test_favorite_from_dict_missing_added_at():
+    """Test Favorite.from_dict falls back to now for missing added_at."""
+    data = {
+        "wallpaper": {
+            "id": "fav1",
+            "url": "",
+            "path": "/tmp/a.jpg",
+            "resolution": {"width": 100, "height": 100},
+            "source": "local",
+            "purity": "sfw",
+        }
+    }
+
+    favorite = Favorite.from_dict(data, Wallpaper)
+    assert favorite.wallpaper_id == "fav1"
+    assert favorite.added_at is not None
+
+
+def test_favorite_from_dict_invalid_added_at():
+    """Test Favorite.from_dict tolerates a malformed added_at timestamp."""
+    data = {
+        "wallpaper": {
+            "id": "fav1",
+            "url": "",
+            "path": "/tmp/a.jpg",
+        },
+        "added_at": "not-a-timestamp",
+    }
+
+    favorite = Favorite.from_dict(data, Wallpaper)
+    assert favorite.wallpaper_id == "fav1"
+    assert favorite.days_since_added == 0

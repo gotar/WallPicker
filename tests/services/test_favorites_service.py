@@ -316,3 +316,48 @@ def test_parse_favorites_data_invalid_item(favorites_service: FavoritesService, 
     # Both items should be parsed successfully (thumbs_large provides valid path)
     assert len(favorites) == 2
     assert len(caplog.records) >= 0
+
+
+def test_parse_favorites_data_skips_malformed_list_entries(
+    favorites_service: FavoritesService, caplog
+):
+    """Test one malformed entry does not kill loading of all favorites."""
+    data = [
+        # Valid entry
+        {
+            "wallpaper": {
+                "id": "good1",
+                "url": "http://example.com/1",
+                "path": "http://example.com/1.jpg",
+                "resolution": {"width": 1920, "height": 1080},
+                "source": "wallhaven",
+                "purity": "sfw",
+            },
+            "added_at": "2024-01-01T00:00:00",
+        },
+        # Malformed: not an object at all
+        "garbage",
+        None,
+        # Malformed object (wallpaper payload not a dict -> skipped with warning)
+        {"wallpaper": 42},
+        # Second valid entry
+        {
+            "wallpaper": {
+                "id": "good2",
+                "url": "http://example.com/2",
+                "path": "http://example.com/2.jpg",
+                "resolution": {"width": 800, "height": 600},
+                "source": "local",
+                "purity": "sfw",
+            },
+            "added_at": "2024-01-02T00:00:00",
+        },
+    ]
+
+    caplog.set_level("WARNING")
+    favorites = favorites_service._parse_favorites_data(data)
+
+    ids = [f.wallpaper_id for f in favorites]
+    assert "good1" in ids
+    assert "good2" in ids
+    assert len(favorites) == 2

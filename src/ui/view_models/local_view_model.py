@@ -4,6 +4,7 @@ ViewModel for local wallpaper browsing
 
 import asyncio
 import hashlib
+import logging
 import shutil
 import sys
 from collections import deque
@@ -21,6 +22,8 @@ from services.wallpaper_setter import WallpaperSetter  # noqa: E402
 from ui.view_models.base import BaseViewModel  # noqa: E402
 
 HASH_CHUNK_SIZE = 65536
+
+logger = logging.getLogger(__name__)
 
 
 class LocalViewModel(BaseViewModel):
@@ -578,6 +581,16 @@ class LocalViewModel(BaseViewModel):
                 except OSError as e:
                     if temp_path.exists():
                         temp_path.unlink()
+                    # Restore original if replacement failed midway (original was
+                    # renamed to backup but the upscaled rename did not complete).
+                    if backup_path.exists() and not wallpaper.path.exists():
+                        try:
+                            backup_path.rename(wallpaper.path)
+                        except OSError as restore_error:
+                            logger.error(
+                                "Failed to restore original from backup: %s",
+                                restore_error,
+                            )
                     result = False, f"Failed to replace file: {e}"
                     self._finish_upscale(wallpaper, *result)
                     return result

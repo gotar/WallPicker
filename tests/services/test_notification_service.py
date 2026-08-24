@@ -58,7 +58,23 @@ class TestNotify:
             ["notify-send", "-i", "test-icon", "Test Title", "Test message"],
             check=False,
             capture_output=True,
+            timeout=10,
         )
+
+    @pytest.mark.integration
+    def test_notify_timeout(self, mocker: MockerFixture):
+        """Test notify returns False when notify-send hangs past timeout."""
+        import subprocess
+
+        service = NotificationService(enabled=True)
+        mocker.patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="notify-send", timeout=10),
+        )
+
+        result = service.notify("Test Title", "Test message")
+
+        assert result is False
 
     @pytest.mark.integration
     def test_notify_file_not_found(self, mocker: MockerFixture):

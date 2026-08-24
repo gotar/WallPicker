@@ -116,3 +116,49 @@ def test_wallpaper_from_dict_defaults():
     assert wallpaper.colors == []
     assert wallpaper.file_size == 0
     assert wallpaper.thumbs_large == ""
+
+
+def test_resolution_aspect_ratio_zero_height():
+    """Test aspect_ratio does not divide by zero for unknown resolution."""
+    assert Resolution(0, 0).aspect_ratio == 0.0
+    assert Resolution(1920, 0).aspect_ratio == 0.0
+
+
+def test_resolution_negative_dimensions_rejected():
+    """Test Resolution validates that dimensions are non-negative."""
+    import pytest
+
+    with pytest.raises(ValueError):
+        Resolution(-1920, 1080)
+    with pytest.raises(ValueError):
+        Resolution(1920, -1080)
+
+
+def test_wallpaper_from_dict_invalid_enum_falls_back():
+    """Test Wallpaper.from_dict falls back to defaults for invalid enum values."""
+    data = {
+        "id": "test1",
+        "url": "",
+        "path": "/tmp/a.jpg",
+        "resolution": {"width": 100, "height": 100},
+        "source": "not-a-real-source",
+        "purity": "not-a-real-purity",
+    }
+
+    wallpaper = Wallpaper.from_dict(data)
+    assert wallpaper.source == WallpaperSource.LOCAL
+    assert wallpaper.purity == WallpaperPurity.SFW
+
+
+def test_wallpaper_from_dict_malformed_resolution():
+    """Test Wallpaper.from_dict tolerates malformed resolution values."""
+    data = {
+        "id": "test1",
+        "url": "",
+        "path": "/tmp/a.jpg",
+        "resolution": {"width": None, "height": "abc"},
+    }
+
+    wallpaper = Wallpaper.from_dict(data)
+    assert wallpaper.resolution.width == 0
+    assert wallpaper.resolution.height == 0

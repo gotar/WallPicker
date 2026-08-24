@@ -346,3 +346,70 @@ class TestLocalViewModelFiltering:
         result = local_view_model._apply_aspect_filter([wp1, wp2], {})
 
         assert len(result) == 2
+
+
+
+
+class TestUpscaleReplaceFailure:
+    """Test upscale replace-failure restores the original from backup (C2)."""
+
+    @pytest.mark.asyncio
+    async def test_replace_failure_restores_original(
+        self, local_view_model, tmp_path, mocker
+    ):
+        """Test that a failed final rename does not lose the original file."""
+        original = tmp_path / "wall.jpg"
+        original.write_bytes(b"original bytes")
+        wallpaper = LocalWallpaper(
+            path=original,
+            filename="wall.jpg",
+            size=len(b"original bytes"),
+            modified_time=1000000.0,
+            tags=[],
+        )
+
+        # waifu2x available
+        mocker.patch(
+            "ui.view_models.local_view_model.shutil.which",
+            return_value="/usr/bin/waifu2x-ncnn-vulkan",
+        )
+
+        # Fake successful subprocess
+        mock_process = mocker.MagicMock()
+        mock_process.returncode = 0
+        mock_process.communicate = mocker.AsyncMock(return_value=(b"", b""))
+        mocker.patch(
+            "asyncio.create_subprocess_exec", mocker.AsyncMock(return_value=mock_process)
+        )
+
+        # Valid upscaled image passes PIL verification (temp file must exist)
+        temp_path = tmp_path / "wall_upscaled.jpg"
+        temp_path.write_bytes(b"upscaled bytes")
+        mock_image = mocker.MagicMock()
+        mock_image.__enter__ = mocker.MagicMock(return_value=mocker.MagicMock(size=(200, 200)))
+        mock_image.__exit__ = mocker.MagicMock(return_value=False)
+        mocker.patch("PIL.Image.open", mocker.MagicMock(return_value=mock_image))
+
+        # Rename of the original to its backup succeeds; rename of the
+        # upscaled temp file onto the original location fails with OSError.
+        # The restore path then renames backup -> original, which must succeed.
+        real_rename = type(original).rename
+        backup_path = tmp_path / "wall_backup.jpg"
+
+        def rename_side_effect(path_self, target):
+            if path_self == backup_path:
+                return real_rename(path_self, target)  # restore must work
+            if path_self == original:
+                return real_rename(path_self, backup_path)  # backup step
+            raise OSError("simulated rename failure")  # upscaled -> original
+
+        mocker.patch.object(
+            type(original), "rename", autospec=True, side_effect=rename_side_effect
+        )
+
+        success, message = await local_view_model._run_upscale_async(wallpaper)
+
+        assert success is False
+        # The original must be restored from the backup
+        assert original.exists()
+        assert original.read_bytes() == b"original bytes"

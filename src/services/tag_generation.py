@@ -16,6 +16,8 @@ class TagGenerationError(Exception):
 class TagGenerationService(BaseService):
     """Service for generating AI tags for images using CLIP-based recognition."""
 
+    SUBPROCESS_TIMEOUT_SECONDS = 120  # Kill hung clip-cpp processes
+
     def __init__(self):
         """Initialize tag generation service."""
         super().__init__()
@@ -293,7 +295,20 @@ class TagGenerationService(BaseService):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await proc.communicate()
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=self.SUBPROCESS_TIMEOUT_SECONDS
+                )
+            except TimeoutError:
+                proc.kill()
+                await proc.communicate()  # Reap the killed process
+                self.log_warning(
+                    f"clip-cpp timed out after {self.SUBPROCESS_TIMEOUT_SECONDS}s "
+                    f"for {image_path}"
+                )
+                raise TagGenerationError(
+                    f"clip-cpp timed out after {self.SUBPROCESS_TIMEOUT_SECONDS}s"
+                ) from None
 
             if proc.returncode != 0:
                 self.log_warning(f"clip-cpp failed for {image_path}: {stderr.decode()}")

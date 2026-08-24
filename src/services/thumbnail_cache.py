@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import os
 import time
 from pathlib import Path
 
@@ -18,6 +19,7 @@ class ThumbnailCache(BaseService):
     CACHE_DIR = Path.home() / ".cache" / "wallpicker" / "thumbnails"
     CACHE_EXPIRY_DAYS = 7  # Cache expires after 7 days
     MAX_CACHE_SIZE_MB = 500  # Maximum cache size in MB
+    CLEANUP_DEBOUNCE_SECONDS = 60  # Minimum interval between cleanup runs
 
     def __init__(self, cache_dir: Path | None = None) -> None:
         """Initialize thumbnail cache.
@@ -28,6 +30,21 @@ class ThumbnailCache(BaseService):
         super().__init__()
         self.cache_dir = cache_dir or self.CACHE_DIR
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._last_cleanup_time = 0.0
+
+    def _safe_stat_size(self, path: Path) -> int:
+        """Get file size, returning 0 if the file vanished (TOCTOU guard)."""
+        try:
+            return path.stat().st_size
+        except FileNotFoundError:
+            return 0
+
+    def _safe_stat_mtime(self, path: Path) -> float:
+        """Get file mtime, returning 0.0 if the file vanished (TOCTOU guard)."""
+        try:
+            return path.stat().st_mtime
+        except FileNotFoundError:
+            return 0.0
 
     def _get_cache_path(self, url: str) -> Path:
         """Generate cache file path from URL using hash."""
@@ -39,9 +56,10 @@ class ThumbnailCache(BaseService):
 
     def _is_expired(self, cache_path: Path) -> bool:
         """Check if cache entry has expired."""
-        if not cache_path.exists():
+        try:
+            file_age = time.time() - cache_path.stat().st_mtime
+        except FileNotFoundError:
             return True
-        file_age = time.time() - cache_path.stat().st_mtime
         return file_age > (self.CACHE_EXPIRY_DAYS * 24 * 60 * 60)
 
     def cleanup(self) -> int:
@@ -51,7 +69,9 @@ class ThumbnailCache(BaseService):
             Number of files removed
         """
         removed_count = 0
-        total_size = sum(f.stat().st_size for f in self.cache_dir.glob("*"))
+        # TOCTOU guard: files may vanish between glob() and stat() when multiple
+        # worker threads download concurrently.
+        total_size = sum(self._safe_stat_size(f) for f in self.cache_dir.glob("*"))
         max_size_bytes = self.MAX_CACHE_SIZE_MB * 1024 * 1024
 
         # Remove expired files
@@ -67,12 +87,17 @@ class ThumbnailCache(BaseService):
                         )
 
         # Remove oldest files if still over limit
-        files = sorted(self.cache_dir.glob("*"), key=lambda f: f.stat().st_mtime)
-        total_size = sum(f.stat().st_size for f in files)
+        files = sorted(
+            self.cache_dir.glob("*"), key=lambda f: self._safe_stat_mtime(f)
+        )
+        total_size = sum(self._safe_stat_size(f) for f in files)
 
         while total_size > max_size_bytes * 0.9 and files:
             oldest = files.pop(0)
-            total_size -= oldest.stat().st_size
+            size = self._safe_stat_size(oldest)
+            total_size -= size
+            if size == 0 and not oldest.exists():
+                continue
             try:
                 oldest.unlink()
                 removed_count += 1
@@ -119,15 +144,24 @@ class ThumbnailCache(BaseService):
         cache_path = self._get_cache_path(url)
 
         try:
-            self.cleanup()
+            # Debounce cleanup: running it on every download races between the
+            # concurrent worker threads and wastes I/O on large caches.
+            now = time.monotonic()
+            if now - self._last_cleanup_time >= self.CLEANUP_DEBOUNCE_SECONDS:
+                self._last_cleanup_time = now
+                self.cleanup()
             self.log_info(f"Downloading thumbnail: {url[:50]}...")
 
             async with session.get(url) as response:
                 response.raise_for_status()
                 image_data = await response.read()
 
-            with open(cache_path, "wb") as f:
+            # Atomic write: a crash mid-write must never leave a corrupt entry
+            # that would be served forever as valid.
+            tmp_path = cache_path.with_name(cache_path.name + ".tmp")
+            with open(tmp_path, "wb") as f:
                 f.write(image_data)
+            os.replace(tmp_path, cache_path)
 
             self.log_debug(f"Cached thumbnail: {cache_path.name}")
             return cache_path

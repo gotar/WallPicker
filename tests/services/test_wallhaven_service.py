@@ -531,6 +531,50 @@ class TestDownload:
                 assert result is False
                 assert not dest.exists()
 
+    @pytest.mark.asyncio
+    async def test_download_failure_removes_partial_file(
+        self, wallhaven_service, tmp_path
+    ):
+        """Test that a mid-download failure leaves no .part file behind."""
+        wallpaper = Wallpaper(
+            id="abc123",
+            url="https://wallhaven.cc/w/abc123",
+            path="https://w.wallhaven.cc/full/abc123.jpg",
+            resolution=Resolution(1920, 1080),
+            source=WallpaperSource.WALLHAVEN,
+            category="general",
+            purity=WallpaperPurity.SFW,
+        )
+
+        dest = tmp_path / "wallpapers" / "abc123.jpg"
+
+        with patch.object(wallhaven_service, "_get_session") as mock_get_session:
+            with patch.object(wallhaven_service, "_rate_limit"):
+                mock_session = AsyncMock()
+                mock_response = MagicMock()
+                mock_response.status = 200
+                mock_response.headers = {"content-length": "100"}
+                mock_response.raise_for_status = MagicMock()
+
+                async def iter_chunked_then_fail(n):
+                    yield b"partial data"
+                    raise aiohttp.ClientPayloadError("Connection dropped")
+
+                mock_response.content.iter_chunked = iter_chunked_then_fail
+
+                mock_context = MockAsyncContextManager(mock_response)
+                mock_session.get = MagicMock(return_value=mock_context)
+                mock_get_session.return_value = mock_session
+
+                result = await wallhaven_service.download(wallpaper, dest)
+
+                assert result is False
+                # No truncated file at destination...
+                assert not dest.exists()
+                # ...and no .part file left on disk either
+                assert not dest.with_name(dest.name + ".part").exists()
+                assert not list(tmp_path.rglob("*.part"))
+
 
 class TestClose:
     """Tests for close method."""

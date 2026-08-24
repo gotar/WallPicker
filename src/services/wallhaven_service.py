@@ -1,6 +1,7 @@
 """Wallhaven Service using async patterns and domain models."""
 
 import asyncio
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -193,6 +194,9 @@ class WallhavenService(BaseService):
         await self._rate_limit()
 
         session = await self._get_session()
+        # Write to a .part file first so an interrupted download never leaves a
+        # truncated file that would later pass the "already downloaded" check.
+        part_path = dest.with_name(dest.name + ".part")
 
         try:
             self.log_info(f"Downloading wallpaper {wallpaper.id}")
@@ -204,7 +208,7 @@ class WallhavenService(BaseService):
                 total_size = int(response.headers.get("content-length", 0))
                 downloaded = 0
 
-                with open(dest, "wb") as f:
+                with open(part_path, "wb") as f:
                     async for chunk in response.content.iter_chunked(8192):
                         f.write(chunk)
                         downloaded += len(chunk)
@@ -212,9 +216,15 @@ class WallhavenService(BaseService):
                         if progress_callback and total_size > 0:
                             progress_callback(downloaded, total_size)
 
+            os.replace(part_path, dest)
             self.log_debug(f"Downloaded wallpaper to {dest}")
             return True
         except (aiohttp.ClientError, OSError) as e:
+            # Clean up the partial download
+            try:
+                part_path.unlink(missing_ok=True)
+            except OSError:
+                pass
             self.log_error(
                 f"Failed to download wallpaper {wallpaper.id}: {e}", exc_info=True
             )

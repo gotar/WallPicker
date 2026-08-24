@@ -32,9 +32,13 @@ class NotificationService(BaseService):
                 ["notify-send", "-i", icon, title, message],
                 check=False,
                 capture_output=True,
+                timeout=10,  # Prevent hung notification daemon from blocking forever
             )
             self.log_debug(f"Notification sent: {title} - {message}")
             return True
+        except subprocess.TimeoutExpired:
+            self.log_warning("notify-send timed out after 10s")
+            return False
         except FileNotFoundError:
             self.log_warning("notify-send not found, notifications disabled")
             return False

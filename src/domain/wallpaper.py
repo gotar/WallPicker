@@ -27,10 +27,17 @@ class Resolution:
     width: int
     height: int
 
+    def __post_init__(self) -> None:
+        if self.width < 0 or self.height < 0:
+            raise ValueError(
+                f"Resolution dimensions must be non-negative, got {self.width}x{self.height}"
+            )
+
     @property
     def aspect_ratio(self) -> float:
         """Calculate aspect ratio."""
-        return self.width / self.height
+        # Guard against zero/negative height (e.g. unknown resolution 0x0)
+        return self.width / self.height if self.height > 0 else 0.0
 
     def __str__(self) -> str:
         """String representation."""
@@ -104,20 +111,36 @@ class Wallpaper:
     @classmethod
     def from_dict(cls, data: dict) -> "Wallpaper":
         """Create from dict for JSON deserialization."""
-        resolution_data = data.get("resolution", {})
+        resolution_data = data.get("resolution")
+        if not isinstance(resolution_data, dict):
+            resolution_data = {}
+
+        def _non_negative(key: str) -> int:
+            try:
+                return max(0, int(resolution_data.get(key, 0)))
+            except (TypeError, ValueError):
+                return 0
+
         resolution = Resolution(
-            width=resolution_data.get("width", 0),
-            height=resolution_data.get("height", 0),
+            width=_non_negative("width"),
+            height=_non_negative("height"),
         )
+
+        def _enum_or_default(value, enum_cls, default):
+            """Convert value to enum member, falling back to default on failure."""
+            try:
+                return enum_cls(value)
+            except ValueError:
+                return enum_cls(default)
 
         return cls(
             id=data.get("id", ""),
             url=data.get("url", ""),
             path=data.get("path", ""),
             resolution=resolution,
-            source=WallpaperSource(data.get("source", "local")),
+            source=_enum_or_default(data.get("source", "local"), WallpaperSource, "local"),
             category=data.get("category", ""),
-            purity=WallpaperPurity(data.get("purity", "sfw")),
+            purity=_enum_or_default(data.get("purity", "sfw"), WallpaperPurity, "sfw"),
             colors=data.get("colors", []),
             file_size=data.get("file_size", 0),
             thumbs_large=data.get("thumbs_large", ""),

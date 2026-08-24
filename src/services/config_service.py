@@ -1,6 +1,7 @@
 """Configuration Service using domain models."""
 
 import json
+import os
 from pathlib import Path
 
 from domain.config import Config, ConfigError
@@ -38,8 +39,10 @@ class ConfigService(BaseService):
 
         if not self.config_file.exists():
             self.log_info(f"Creating default config at {self.config_file}")
-            with open(self.config_file, "w") as f:
+            tmp_path = self.config_file.with_suffix(self.config_file.suffix + ".tmp")
+            with open(tmp_path, "w") as f:
                 json.dump(self.DEFAULT_CONFIG, f, indent=4)
+            os.replace(tmp_path, self.config_file)
 
     def load_config(self) -> Config:
         """Load configuration from file and return domain model.
@@ -83,8 +86,10 @@ class ConfigService(BaseService):
             config_dict = config.to_dict()
 
             self.config_dir.mkdir(parents=True, exist_ok=True)
-            with open(self.config_file, "w") as f:
+            tmp_path = self.config_file.with_suffix(self.config_file.suffix + ".tmp")
+            with open(tmp_path, "w") as f:
                 json.dump(config_dict, f, indent=4)
+            os.replace(tmp_path, self.config_file)
 
             self._config = config
             self.log_info(f"Saved config to {self.config_file}")

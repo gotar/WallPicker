@@ -1,6 +1,7 @@
 """Favorites Service using domain models."""
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -71,7 +72,21 @@ class FavoritesService(BaseService):
         )
 
         if isinstance(data, list):
-            return [Favorite.from_dict(item, Wallpaper) for item in data]
+            # Per-item guard: one malformed entry must not kill all favorites.
+            favorites: list[Favorite] = []
+            for index, item in enumerate(data):
+                if not isinstance(item, dict):
+                    self.log_warning(
+                        f"Skipping favorite at index {index}: not an object"
+                    )
+                    continue
+                try:
+                    favorites.append(Favorite.from_dict(item, Wallpaper))
+                except Exception as e:
+                    self.log_warning(
+                        f"Skipping malformed favorite at index {index}: {e}"
+                    )
+            return favorites
 
         if isinstance(data, dict):
             favorites = []
@@ -224,8 +239,12 @@ class FavoritesService(BaseService):
         """
         try:
             favorites_data = [f.to_dict() for f in favorites]
-            with open(self.favorites_file, "w") as f:
+            tmp_path = self.favorites_file.with_suffix(
+                self.favorites_file.suffix + ".tmp"
+            )
+            with open(tmp_path, "w") as f:
                 json.dump(favorites_data, f, indent=4)
+            os.replace(tmp_path, self.favorites_file)
             self._favorites = favorites
             self.log_debug(f"Saved {len(favorites)} favorites to {self.favorites_file}")
         except OSError as e:

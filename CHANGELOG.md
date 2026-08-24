@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.6] - 2026-08-24
+
+### Fixed
+- Rate limiting: request timestamps updated under an asyncio.Lock; HTTP 429
+  responses retried up to 3x with exponential backoff honoring Retry-After
+- Concurrent downloads of the same wallpaper no longer interleave partial
+  data (unique .part temp names)
+- Explicit aiohttp timeouts (30s API / 120s downloads) instead of the 300s
+  default
+- Corrupt thumbnail cache entries are invalidated and re-fetched once instead
+  of being served forever
+- Config saves no longer fail when the wallpapers directory vanished
+  externally (dir is recreated, type checks stay in the domain model)
+- Launcher: interpreter availability probed before running the app — a crash
+  exit code propagates instead of silently relaunching a second instance
+- Selection list pruned on wallpaper reload/delete so selected-count cannot
+  exceed visible items; removed dead pending-path bookkeeping
+
 ## [2.5.5] - 2026-08-24
 
 ### Fixed

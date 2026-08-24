@@ -2,13 +2,26 @@
 Tests for LocalWallpaperService
 """
 
+import asyncio
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+from PIL import Image
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from services.local_service import LocalWallpaper, LocalWallpaperService
+from services.tag_storage import TagStorageService
+
+
+@pytest.fixture(autouse=True)
+def _reset_class_level_tag_storage():
+    """LocalWallpaper caches a TagStorageService on the class; isolate per test."""
+    yield
+    if hasattr(LocalWallpaper, "_tag_storage"):
+        del LocalWallpaper._tag_storage
 
 
 class TestLocalWallpaperModel:
@@ -369,3 +382,241 @@ class TestSupportedExtensions:
 
         expected_extensions = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
         assert service.SUPPORTED_EXTENSIONS == expected_extensions
+
+
+class TestResolutionLazyLoading:
+    """Resolution is decoded lazily from the real image file."""
+
+    def test_resolution_read_from_real_image(self, tmp_path):
+        img = tmp_path / "photo.jpg"
+        Image.new("RGB", (64, 48), (1, 2, 3)).save(img, "PNG")  # PNG content, .jpg name
+
+        wp = LocalWallpaper(
+            path=img,
+            filename="photo.jpg",
+            size=img.stat().st_size,
+            modified_time=0.0,
+        )
+
+        assert wp.resolution == "64x48"
+
+    def test_resolution_is_cached_after_first_access(self, tmp_path, mocker):
+        img = tmp_path / "photo.png"
+        Image.new("RGB", (10, 20)).save(img)
+        wp = LocalWallpaper(
+            path=img,
+            filename="photo.png",
+            size=1,
+            modified_time=0.0,
+        )
+
+        open_spy = mocker.spy(Image, "open")
+        assert wp.resolution == "10x20"
+        _ = wp.resolution  # second access
+
+        assert open_spy.call_count == 1
+
+    def test_resolution_failure_yields_empty_string(self, tmp_path):
+        broken = tmp_path / "broken.jpg"
+        broken.write_bytes(b"garbage")
+
+        wp = LocalWallpaper(path=broken, filename="broken.jpg", size=7, modified_time=0.0)
+
+        assert wp.resolution == ""
+
+    def test_ensure_metadata_loaded_eagerly(self, tmp_path):
+        img = tmp_path / "eager.png"
+        Image.new("RGB", (8, 8)).save(img)
+        wp = LocalWallpaper(path=img, filename="eager.png", size=1, modified_time=0.0)
+
+        wp.ensure_metadata_loaded()
+
+        assert wp.resolution == "8x8"
+        assert wp._tags_loaded is True
+
+
+class TestTagsCaching:
+    """Tags come from TagStorageService exactly once per wallpaper (L2)."""
+
+    @pytest.fixture
+    def storage(self, tmp_path):
+        storage = TagStorageService(cache_dir=tmp_path / "tags")
+        # Pre-seed the class-level cache so no real ~/.cache path is touched.
+        LocalWallpaper._tag_storage = storage
+        return storage
+
+    def test_tags_loaded_from_storage(self, storage, tmp_path):
+        img = tmp_path / "tagged.png"
+        img.write_bytes(b"x")
+        storage.save_tags(img, ["nature", "sunset"])
+
+        wp = LocalWallpaper(path=img, filename="tagged.png", size=1, modified_time=0.0)
+
+        assert wp.tags == ["nature", "sunset"]
+        assert wp._tags_loaded is True
+
+    def test_second_access_does_not_reread_disk(self, storage, tmp_path, mocker):
+        img = tmp_path / "once.png"
+        img.write_bytes(b"x")
+        storage.save_tags(img, ["nature"])
+        wp = LocalWallpaper(path=img, filename="once.png", size=1, modified_time=0.0)
+
+        get_spy = mocker.spy(storage, "get_tags")
+        first = wp.tags
+        second = wp.tags  # must be served from memory
+
+        assert first == second == ["nature"]
+        assert get_spy.call_count == 1
+
+    def test_negative_result_is_not_reread(self, storage, tmp_path, mocker):
+        """An empty tag cache must not trigger a disk read on every access (L2)."""
+        img = tmp_path / "untagged.png"
+        img.write_bytes(b"x")
+        wp = LocalWallpaper(path=img, filename="untagged.png", size=1, modified_time=0.0)
+
+        get_spy = mocker.spy(storage, "get_tags")
+        assert wp.tags == []
+        assert wp.tags == []
+        assert wp.tags == []
+
+        assert get_spy.call_count == 1
+
+    def test_preloaded_tags_skip_storage_entirely(self, storage, tmp_path, mocker):
+        create_spy = mocker.spy(TagStorageService, "get_tags")
+        wp = LocalWallpaper(
+            path=tmp_path / "pre.png",
+            filename="pre.png",
+            size=1,
+            modified_time=0.0,
+            tags=["anime"],
+        )
+
+        assert wp.tags == ["anime"]
+        assert wp._tags_loaded is True
+        assert create_spy.call_count == 0
+
+    def test_tags_setter_marks_loaded(self, storage, tmp_path):
+        wp = LocalWallpaper(path=tmp_path / "s.png", filename="s.png", size=1,
+                            modified_time=0.0)
+
+        wp.tags = ["manual"]
+
+        assert wp._tags_loaded is True
+        assert wp.tags == ["manual"]
+
+    def test_storage_failure_falls_back_to_empty_list(self, tmp_path, mocker):
+        mocker.patch(
+            "services.tag_storage.TagStorageService",
+            side_effect=RuntimeError("boom"),
+        )
+        if hasattr(LocalWallpaper, "_tag_storage"):
+            del LocalWallpaper._tag_storage
+
+        wp = LocalWallpaper(path=tmp_path / "f.png", filename="f.png", size=1,
+                            modified_time=0.0)
+
+        assert wp.tags == []
+        assert wp._tags_loaded is True
+
+
+class TestScanRobustness:
+    def test_scan_ignores_directories_named_like_images(self, tmp_path):
+        (tmp_path / "fake.jpg").mkdir()
+        (tmp_path / "real.jpg").write_bytes(b"x")
+
+        service = LocalWallpaperService(pictures_dir=tmp_path)
+        wallpapers = service.get_wallpapers()
+
+        assert [w.filename for w in wallpapers] == ["real.jpg"]
+
+    def test_get_wallpapers_async_preloads_metadata(self, tmp_path):
+        img = tmp_path / "a.png"
+        Image.new("RGB", (6, 4)).save(img)
+        subdir = tmp_path / "nested"
+        subdir.mkdir()
+        nested = subdir / "b.png"
+        Image.new("RGB", (5, 5)).save(nested)
+
+        service = LocalWallpaperService(pictures_dir=tmp_path)
+        wallpapers = asyncio.run(service.get_wallpapers_async())
+
+        assert len(wallpapers) == 2
+        resolutions = {w.filename: w.resolution for w in wallpapers}
+        assert resolutions["a.png"] == "6x4"
+        assert resolutions["b.png"] == "5x5"
+
+    def test_search_tag_only_match_is_included_and_ranked(self, tmp_path):
+        """A tag hit qualifies a file whose name doesn't match at all."""
+        by_tag = LocalWallpaper(
+            path=tmp_path / "x0947.jpg",
+            filename="x0947.jpg",
+            size=1,
+            modified_time=1.0,
+            tags=["sunset"],
+        )
+        by_name = LocalWallpaper(
+            path=tmp_path / "sunset_cliff.jpg",
+            filename="sunset_cliff.jpg",
+            size=1,
+            modified_time=2.0,
+            tags=[],
+        )
+
+        service = LocalWallpaperService(pictures_dir=tmp_path)
+        results = service.search_wallpapers("sunset", wallpapers=[by_tag, by_name])
+
+        filenames = [w.filename for w in results]
+        # Filename match scores higher (100 vs tag bonus 80), tag-only still included.
+        assert filenames == ["sunset_cliff.jpg", "x0947.jpg"]
+
+
+class TestDeleteAsync:
+    async def test_delete_wallpaper_async_trashes_file(self, tmp_path, mocker):
+        send2trash_mock = mocker.patch("services.local_service.send2trash")
+        test_file = tmp_path / "gone.jpg"
+        test_file.write_bytes(b"data")
+
+        service = LocalWallpaperService(pictures_dir=tmp_path)
+        result = await service.delete_wallpaper_async(test_file)
+
+        assert result is True
+        send2trash_mock.assert_called_once_with(str(test_file))
+
+
+class TestErrorPaths:
+    """Defensive error handling keeps the UI alive on I/O failures."""
+
+    def test_resolution_setter_stores_value(self, tmp_path):
+        wp = LocalWallpaper(path=tmp_path / "s.png", filename="s.png", size=1,
+                            modified_time=0.0)
+
+        wp.resolution = "1920x1080"
+
+        assert wp.resolution == "1920x1080"
+
+    def test_scan_error_is_swallowed_and_returns_partial(self, tmp_path, mocker):
+        mocker.patch("pathlib.Path.glob", side_effect=OSError("permission denied"))
+
+        service = LocalWallpaperService(pictures_dir=tmp_path)
+
+        assert service.get_wallpapers() == []
+
+    def test_delete_wallpaper_send2trash_failure_returns_false(
+        self, tmp_path, mocker
+    ):
+        existing = tmp_path / "doomed.jpg"
+        existing.write_bytes(b"data")
+        mocker.patch("services.local_service.send2trash",
+                     side_effect=OSError("trash unavailable"))
+
+        service = LocalWallpaperService(pictures_dir=tmp_path)
+
+        assert service.delete_wallpaper(existing) is False
+
+    async def test_search_wallpapers_async_delegates_to_sync(self, tmp_path):
+        (tmp_path / "anime.jpg").write_bytes(b"x")
+
+        service = LocalWallpaperService(pictures_dir=tmp_path)
+        results = await service.search_wallpapers_async("anime")
+
+        assert [w.filename for w in results] == ["anime.jpg"]

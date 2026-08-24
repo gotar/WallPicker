@@ -38,7 +38,6 @@ class WallpaperSetter:
             # Event loop not set up, run synchronously
             return asyncio.run(self.set_wallpaper_async(image_path))
         except Exception as e:
-            logger = logging.getLogger(__name__)
             logger.error(f"Failed to set wallpaper: {e}", exc_info=True)
             return False
 
@@ -49,10 +48,19 @@ class WallpaperSetter:
 
         try:
             # Preferred integration: let omarchy update its canonical state
-            # symlink and notify the running shell over IPC. This keeps the
-            # desktop background single-sourced (the shell renders it), so we
-            # must NOT additionally draw via awww on top of it.
+            # symlink and notify the running shell over IPC.
             if await self._apply_via_omarchy(path):
+                # If an awww daemon is already running it owns the visible
+                # (top) wallpaper layer — push the new image to it too,
+                # otherwise the old image stays on screen. Never spawn a new
+                # daemon here: without one the shell renders the background.
+                if await self._awww_daemon_active():
+                    try:
+                        await self._apply_wallpaper(path)
+                    except (RuntimeError, subprocess.SubprocessError) as e:
+                        logger.warning(
+                            "Running awww daemon could not be updated: %s", e
+                        )
                 self._save_original_path(path)
                 await asyncio.to_thread(self._cleanup_old_wallpapers)
                 return True
@@ -67,11 +75,9 @@ class WallpaperSetter:
             await asyncio.to_thread(self._cleanup_old_wallpapers)
             return True
         except (OSError, subprocess.SubprocessError, RuntimeError) as e:
-            logger = logging.getLogger(__name__)
             logger.error(f"Failed to set wallpaper: {e}", exc_info=True)
             return False
         except Exception as e:
-            logger = logging.getLogger(__name__)
             logger.critical(f"Unexpected error setting wallpaper: {e}", exc_info=True)
             return False
 
@@ -91,6 +97,21 @@ class WallpaperSetter:
                 stderr=asyncio.subprocess.DEVNULL,
             )
             await asyncio.sleep(1)
+
+    async def _awww_daemon_active(self) -> bool:
+        """True when an awww daemon is already running (never spawns one)."""
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "pgrep",
+                "-x",
+                "awww-daemon",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await process.communicate()
+            return process.returncode == 0
+        except OSError:
+            return False
 
     async def _apply_via_omarchy(self, path: Path) -> bool:
         """Apply via omarchy-theme-bg-set; False if unavailable or failed."""

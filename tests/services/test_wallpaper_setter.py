@@ -60,11 +60,12 @@ class TestSetWallpaper:
         return patcher
 
     def test_set_wallpaper_success_via_omarchy(self, test_image_path):
-        """Successful omarchy integration must not draw via awww on top"""
+        """Omarchy path: no daemon spawn; awww only updated if already running"""
         with patch("pathlib.Path.home"):
             setter = WallpaperSetter()
 
             self._make_omarchy_available(setter, True)
+            setter._awww_daemon_active = AsyncMock(return_value=False)
             setter._ensure_daemon_running = AsyncMock()
             setter._apply_wallpaper = AsyncMock()
             setter._save_original_path = MagicMock()
@@ -74,7 +75,7 @@ class TestSetWallpaper:
 
             assert result is True
             setter._apply_via_omarchy.assert_awaited_once()
-            # awww must not double-draw over the shell-rendered background
+            # without a pre-existing daemon the shell renders; never spawn awww
             setter._ensure_daemon_running.assert_not_called()
             setter._apply_wallpaper.assert_not_called()
             setter._save_original_path.assert_called_once()
@@ -614,3 +615,56 @@ class TestSetWallpaperAsyncFailurePaths:
             setter = WallpaperSetter()
 
             assert await setter.set_wallpaper_async("/nonexistent/wp.jpg") is False
+
+
+class TestAwwwFollowsOmarchy:
+    """A running awww daemon owns the visible layer: it must be updated too."""
+
+    @pytest.fixture
+    def test_image_path(self, tmp_path):
+        test_file = tmp_path / "wallpaper.jpg"
+        test_file.write_bytes(b"test image data")
+        return str(test_file)
+
+    def _wire_omarchy_success(self, setter):
+        setter._apply_via_omarchy = AsyncMock(return_value=True)
+        setter._save_original_path = MagicMock()
+        setter._cleanup_old_wallpapers = MagicMock()
+
+    async def test_running_daemon_gets_new_image(self, test_image_path):
+        with patch("pathlib.Path.home"):
+            setter = WallpaperSetter()
+
+        self._wire_omarchy_success(setter)
+        setter._awww_daemon_active = AsyncMock(return_value=True)
+        setter._apply_wallpaper = AsyncMock()
+
+        assert await setter.set_wallpaper_async(test_image_path) is True
+        setter._apply_wallpaper.assert_awaited_once_with(Path(test_image_path))
+        setter._save_original_path.assert_called_once()
+
+    async def test_no_daemon_means_no_awww_call(self, test_image_path):
+        """Without an existing daemon the shell renders; do not spawn awww."""
+        with patch("pathlib.Path.home"):
+            setter = WallpaperSetter()
+
+        self._wire_omarchy_success(setter)
+        setter._awww_daemon_active = AsyncMock(return_value=False)
+        setter._ensure_daemon_running = AsyncMock()
+        setter._apply_wallpaper = AsyncMock()
+
+        assert await setter.set_wallpaper_async(test_image_path) is True
+        setter._apply_wallpaper.assert_not_called()
+        setter._ensure_daemon_running.assert_not_called()
+
+    async def test_awww_failure_does_not_fail_the_set(self, test_image_path):
+        """Symlink+omarchy already succeeded; awww hiccup is only a warning."""
+        with patch("pathlib.Path.home"):
+            setter = WallpaperSetter()
+
+        self._wire_omarchy_success(setter)
+        setter._awww_daemon_active = AsyncMock(return_value=True)
+        setter._apply_wallpaper = AsyncMock(side_effect=RuntimeError("awww down"))
+
+        assert await setter.set_wallpaper_async(test_image_path) is True
+        setter._save_original_path.assert_called_once()

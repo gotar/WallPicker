@@ -141,7 +141,20 @@ def mock_thumbnail_cache():
 
 
 @pytest.fixture
-def local_view_model(mock_local_service, mock_wallpaper_setter, tmp_path, mocker):
+def mock_idle_add(mocker):
+    """Run GLib.idle_add callbacks immediately (synchronous) in tests.
+
+    ViewModels marshal GTK state changes through GLib.idle_add because
+    coroutines run on a background thread; tests need those applied eagerly.
+    """
+    return mocker.patch(
+        "gi.repository.GLib.idle_add",
+        side_effect=lambda func, *args: func(*args),
+    )
+
+
+@pytest.fixture
+def local_view_model(mock_local_service, mock_wallpaper_setter, tmp_path, mocker, mock_idle_add):
     """Create LocalViewModel with mocked services."""
     from ui.view_models.local_view_model import LocalViewModel
 
@@ -157,7 +170,7 @@ def local_view_model(mock_local_service, mock_wallpaper_setter, tmp_path, mocker
 
 
 @pytest.fixture
-def favorites_view_model(mock_favorites_service, mock_wallpaper_setter):
+def favorites_view_model(mock_favorites_service, mock_wallpaper_setter, mock_idle_add):
     """Create FavoritesViewModel with mocked services."""
     from ui.view_models.favorites_view_model import FavoritesViewModel
 
@@ -181,7 +194,7 @@ def mock_config_service():
 
 
 @pytest.fixture
-def wallhaven_view_model(mock_wallhaven_service, mock_config_service):
+def wallhaven_view_model(mock_wallhaven_service, mock_config_service, mock_idle_add):
     """Create WallhavenViewModel with mocked services."""
     from unittest.mock import MagicMock
 

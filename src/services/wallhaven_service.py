@@ -236,11 +236,6 @@ class WallhavenService(BaseService):
             await self._session.close()
             self.log_debug("Closed aiohttp session")
 
-    def __del__(self) -> None:
-        """Cleanup on deletion."""
-        if self._session and not self._session.closed:
-            try:
-                loop = asyncio.get_event_loop()
-                loop.create_task(self.close())
-            except RuntimeError:
-                pass
+    # NOTE: There is intentionally no __del__ here. Creating asyncio tasks
+    # from a GC thread is unsafe; shutdown is handled by the app's
+    # do_shutdown hook (see ui/main_window.py), which awaits close().

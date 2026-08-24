@@ -2,6 +2,7 @@
 
 # ruff: noqa: E402  # gi.repository imports must follow gi.require_version()
 
+import asyncio
 import logging
 import site
 import sys
@@ -21,7 +22,11 @@ if user_site not in sys.path:
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from core.asyncio_integration import schedule_async  # noqa: E402
+from core.asyncio_integration import (  # noqa: E402
+    get_event_loop,
+    schedule_async,
+    shutdown_event_loop,
+)
 from services.banner_service import BannerService
 from services.config_service import ConfigService
 from services.favorites_service import FavoritesService
@@ -124,6 +129,34 @@ class MainWindow(Adw.Application):
         self.window.add_breakpoint(breakpoint)
 
         self.window.present()
+
+    def do_shutdown(self):
+        """Graceful application shutdown: close resources and stop the loop.
+
+        Closes the Wallhaven aiohttp session (M6) and stops the background
+        asyncio event loop thread instead of relying on daemon-thread teardown
+        or unsafe ``__del__`` cleanup (M27).
+        """
+        logger = logging.getLogger(__name__)
+
+        if self.wallhaven_service is not None:
+            try:
+                loop = get_event_loop()
+                future = asyncio.run_coroutine_threadsafe(
+                    self.wallhaven_service.close(), loop
+                )
+                future.result(timeout=5)
+            except RuntimeError:
+                pass  # Event loop never set up
+            except Exception as e:
+                logger.debug(f"Error closing aiohttp session during shutdown: {e}")
+
+        try:
+            shutdown_event_loop(timeout=5)
+        except Exception as e:
+            logger.debug(f"Error shutting down event loop: {e}")
+
+        Adw.Application.do_shutdown(self)
 
     def _load_css(self):
         """Load CSS stylesheet for the application."""

@@ -171,3 +171,71 @@ class TestIntegrationBaseViewModel:
         # Clear busy
         vm.is_busy = False
         assert vm.is_busy is False
+
+
+class TestThreadSafeHelpers:
+    """Test thread-safe idle helpers (C1: GTK main-thread marshalling)."""
+
+    def test_set_property_idle_dispatches_via_idle_add(self, mocker: MockerFixture):
+        """_set_property_idle schedules the write through GLib.idle_add."""
+        idle_add = mocker.patch(
+            "ui.view_models.base.GLib.idle_add",
+            side_effect=lambda func, *args: func(*args),
+        )
+        vm = MockBaseViewModel()
+
+        vm._set_property_idle("is_busy", True)
+
+        idle_add.assert_called_once()
+        assert vm.is_busy is True
+
+    def test_notify_idle_dispatches_via_idle_add(self, mocker: MockerFixture):
+        """_notify_idle emits the notify signal on the main thread."""
+        idle_add = mocker.patch(
+            "ui.view_models.base.GLib.idle_add",
+            side_effect=lambda func, *args: func(*args),
+        )
+        vm = MockBaseViewModel()
+        notify_spy = mocker.patch.object(vm, "notify")
+
+        vm._notify_idle("is_busy")
+
+        idle_add.assert_called_once()
+        notify_spy.assert_called_once_with("is_busy")
+
+    def test_emit_idle_dispatches_via_idle_add(self, mocker: MockerFixture):
+        """_emit_idle emits signals on the main thread."""
+        idle_add = mocker.patch(
+            "ui.view_models.base.GLib.idle_add",
+            side_effect=lambda func, *args: func(*args),
+        )
+        vm = MockBaseViewModel()
+        received = []
+        vm.connect("wallpaper-set", lambda _o, path: received.append(path))
+
+        vm._emit_idle("wallpaper-set", "/tmp/wall.jpg")
+
+        idle_add.assert_called_once()
+        assert received == ["/tmp/wall.jpg"]
+
+    def test_emit_idle_passes_multiple_args(self, mocker: MockerFixture):
+        """_emit_idle forwards all signal arguments unchanged."""
+        mocker.patch(
+            "ui.view_models.base.GLib.idle_add",
+            side_effect=lambda func, *args: func(*args),
+        )
+
+        class MultiSignalViewModel(BaseViewModel):
+            __gsignals__ = {
+                "multi": (GObject.SignalFlags.RUN_FIRST, None, (bool, str, str)),
+            }
+
+        vm = MultiSignalViewModel()
+        received = []
+        vm.connect(
+            "multi", lambda _o, a, b, c: received.extend([a, b, c])
+        )
+
+        vm._emit_idle("multi", True, "msg", "/path")
+
+        assert received == [True, "msg", "/path"]

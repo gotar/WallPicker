@@ -83,23 +83,25 @@ class FavoritesViewModel(BaseViewModel):
 
     async def load_favorites(self) -> None:
         try:
-            self.is_busy = True
-            self.error_message = None
+            self._set_property_idle("is_busy", True)
+            self._set_property_idle("error_message", None)
 
             favorites = await asyncio.to_thread(self.favorites_service.get_favorites)
             GLib.idle_add(self._set_favorites, favorites)
             logger.info(f"Loading favorites, found {len(favorites)} items")
 
         except Exception as e:
-            self.error_message = f"Failed to load favorites: {e}"
+            self._set_property_idle(
+                "error_message", f"Failed to load favorites: {e}"
+            )
             GLib.idle_add(self._set_favorites, [])
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     async def search_favorites(self, query: str = "") -> None:
         try:
-            self.is_busy = True
-            self.error_message = None
+            self._set_property_idle("is_busy", True)
+            self._set_property_idle("error_message", None)
             self._search_query = query
 
             if not query or query.strip() == "":
@@ -127,10 +129,12 @@ class FavoritesViewModel(BaseViewModel):
                 GLib.idle_add(self._set_favorites, matched_favorites)
 
         except Exception as e:
-            self.error_message = f"Failed to search favorites: {e}"
+            self._set_property_idle(
+                "error_message", f"Failed to search favorites: {e}"
+            )
             GLib.idle_add(self._set_favorites, [])
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     def add_favorite_sync(
         self,
@@ -166,8 +170,8 @@ class FavoritesViewModel(BaseViewModel):
         tags: str,
     ) -> bool:
         try:
-            self.is_busy = True
-            self.error_message = None
+            self._set_property_idle("is_busy", True)
+            self._set_property_idle("error_message", None)
 
             try:
                 wallpaper_source = WallpaperSource(source)
@@ -191,16 +195,16 @@ class FavoritesViewModel(BaseViewModel):
             return True
 
         except Exception as e:
-            self.error_message = f"Failed to add favorite: {e}"
+            self._set_property_idle("error_message", f"Failed to add favorite: {e}")
             self._show_toast(f"Failed to add favorite: {e}", "error")
             return False
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     async def remove_favorite(self, wallpaper_id: str | Favorite) -> bool:
         try:
-            self.is_busy = True
-            self.error_message = None
+            self._set_property_idle("is_busy", True)
+            self._set_property_idle("error_message", None)
 
             target_wallpaper_id = (
                 wallpaper_id.wallpaper_id
@@ -217,34 +221,36 @@ class FavoritesViewModel(BaseViewModel):
             return True
 
         except Exception as e:
-            self.error_message = f"Failed to remove favorite: {e}"
+            self._set_property_idle(
+                "error_message", f"Failed to remove favorite: {e}"
+            )
             self._show_toast(f"Failed to remove favorite: {e}", "error")
             return False
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     async def set_wallpaper(self, favorite: Favorite) -> tuple[bool, str]:
         try:
-            self.is_busy = True
-            self.error_message = None
+            self._set_property_idle("is_busy", True)
+            self._set_property_idle("error_message", None)
 
             result = await self.wallpaper_setter.set_wallpaper_async(
                 favorite.wallpaper.path
             )
 
             if result:
-                self.emit("wallpaper-set", favorite.wallpaper.id)
+                self._emit_idle("wallpaper-set", favorite.wallpaper.id)
                 self._show_toast("Wallpaper set successfully", "success")
                 return True, "Wallpaper set successfully"
 
             return False, "Failed to set wallpaper"
 
         except Exception as e:
-            self.error_message = f"Failed to set wallpaper: {e}"
+            self._set_property_idle("error_message", f"Failed to set wallpaper: {e}")
             self._show_toast(f"Failed to set wallpaper: {e}", "error")
             return False, f"Failed to set wallpaper: {e}"
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     async def set_wallpaper_async(self, favorite: Favorite) -> tuple[bool, str]:
         if not self.wallpaper_setter:
@@ -252,8 +258,8 @@ class FavoritesViewModel(BaseViewModel):
 
         async with self._set_wallpaper_lock:
             try:
-                self.is_busy = True
-                self.error_message = None
+                self._set_property_idle("is_busy", True)
+                self._set_property_idle("error_message", None)
 
                 wallpaper = favorite.wallpaper
                 path = wallpaper.path
@@ -290,17 +296,19 @@ class FavoritesViewModel(BaseViewModel):
                 result = await self.wallpaper_setter.set_wallpaper_async(path)
 
                 if result:
-                    self.emit("wallpaper-set", wallpaper.id)
+                    self._emit_idle("wallpaper-set", wallpaper.id)
                     return True, "Wallpaper set successfully"
                 else:
                     return False, "Failed to set wallpaper"
 
             except Exception as e:
-                self.error_message = f"Failed to set wallpaper: {e}"
+                self._set_property_idle(
+                    "error_message", f"Failed to set wallpaper: {e}"
+                )
                 logger.error(f"Failed to set wallpaper: {e}", exc_info=True)
                 return False, f"Failed to set wallpaper: {e}"
             finally:
-                self.is_busy = False
+                self._set_property_idle("is_busy", False)
 
     def is_favorite(self, wallpaper_id: str) -> bool:
         result = self.favorites_service.is_favorite(wallpaper_id)

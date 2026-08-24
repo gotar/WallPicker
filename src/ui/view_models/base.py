@@ -8,7 +8,7 @@ import gi
 gi.require_version("GObject", "2.0")
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from gi.repository import GObject  # noqa: E402
+from gi.repository import GLib, GObject  # noqa: E402
 
 
 class BaseViewModel(GObject.Object):
@@ -59,6 +59,53 @@ class BaseViewModel(GObject.Object):
             prop_name: Name of property that changed
         """
         self.notify(prop_name)
+
+    # ------------------------------------------------------------------
+    # Thread-safe helpers.
+    #
+    # Coroutines run on a background asyncio thread (see
+    # core.asyncio_integration); GTK/GObject state must only be touched on
+    # the GTK main thread, so all property writes, notify() calls and signal
+    # emissions from coroutines must go through these helpers.
+    # ------------------------------------------------------------------
+
+    def _set_property_idle(self, prop_name: str, value) -> None:
+        """Set a GObject property on the GTK main thread (thread-safe).
+
+        Args:
+            prop_name: Name of the property to set
+            value: Value to assign
+        """
+        GLib.idle_add(self._apply_property_idle, prop_name, value)
+
+    def _apply_property_idle(self, prop_name: str, value) -> bool:
+        setattr(self, prop_name, value)
+        return False
+
+    def _notify_idle(self, prop_name: str) -> None:
+        """Emit a property notify signal on the GTK main thread (thread-safe).
+
+        Args:
+            prop_name: Name of the property that changed
+        """
+        GLib.idle_add(self._apply_notify_idle, prop_name)
+
+    def _apply_notify_idle(self, prop_name: str) -> bool:
+        self.notify(prop_name)
+        return False
+
+    def _emit_idle(self, signal_name: str, *args) -> None:
+        """Emit a GObject signal on the GTK main thread (thread-safe).
+
+        Args:
+            signal_name: Name of the signal to emit
+            *args: Signal arguments
+        """
+        GLib.idle_add(self._apply_emit_idle, signal_name, *args)
+
+    def _apply_emit_idle(self, signal_name: str, *args) -> bool:
+        self.emit(signal_name, *args)
+        return False
 
     def clear_error(self) -> None:
         """Clear error message."""

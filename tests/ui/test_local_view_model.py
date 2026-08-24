@@ -413,3 +413,150 @@ class TestUpscaleReplaceFailure:
         # The original must be restored from the backup
         assert original.exists()
         assert original.read_bytes() == b"original bytes"
+
+
+class TestUpscaleTagQueues:
+    """Test queue counters for upscaling/tagging (H8/H9/L12)."""
+
+    def test_upscale_and_tag_active_counts_are_independent(
+        self, local_view_model, mocker, tmp_path
+    ):
+        """Upscale and tag queues must not share an active counter (H8)."""
+
+        def fake_schedule(coro):
+            coro.close()
+            return None
+
+        mocker.patch(
+            "ui.view_models.local_view_model.schedule_async",
+            side_effect=fake_schedule,
+        )
+
+        wp_a = LocalWallpaper(
+            path=tmp_path / "a.jpg",
+            filename="a.jpg",
+            size=1,
+            modified_time=1.0,
+            tags=[],
+        )
+        wp_b = LocalWallpaper(
+            path=tmp_path / "b.jpg",
+            filename="b.jpg",
+            size=1,
+            modified_time=2.0,
+            tags=[],
+        )
+
+        local_view_model.queue_upscale(wp_a)
+        local_view_model.queue_upscale(wp_b)
+        assert local_view_model.upscaling_active_count == 2
+        assert local_view_model.upscaling_total_count == 2
+        assert local_view_model.tagging_active_count == 0
+
+        local_view_model.queue_generate_tags(wp_b)
+        assert local_view_model.tagging_active_count == 1
+        # Upscale counter unaffected by tagging activity
+        assert local_view_model.upscaling_active_count == 2
+
+        local_view_model._finish_upscale(wp_a, True, "ok")
+        assert local_view_model.upscaling_active_count == 1
+
+        local_view_model._finish_tag(wp_b, True, "ok")
+        assert local_view_model.tagging_active_count == 0
+
+    def test_tag_queue_limit_is_independent(self, local_view_model, mocker, tmp_path):
+        """Tagging gets its own MAX_CONCURRENT_TAGGING budget."""
+
+        def fake_schedule(coro):
+            coro.close()
+            return None
+
+        mocker.patch(
+            "ui.view_models.local_view_model.schedule_async",
+            side_effect=fake_schedule,
+        )
+
+        wps = [
+            LocalWallpaper(
+                path=tmp_path / f"t{i}.jpg",
+                filename=f"t{i}.jpg",
+                size=1,
+                modified_time=float(i),
+                tags=[],
+            )
+            for i in range(3)
+        ]
+        for wp in wps:
+            local_view_model.queue_generate_tags(wp)
+
+        assert local_view_model.tagging_active_count == (
+            local_view_model.MAX_CONCURRENT_TAGGING
+        )
+        assert len(local_view_model._tag_queue) == 1
+
+    def test_schedule_failure_does_not_leak_active_count(
+        self, local_view_model, mocker, tmp_path
+    ):
+        """If scheduling fails, the active count must be restored (L12)."""
+
+        def failing_schedule(coro):
+            coro.close()
+            raise RuntimeError("event loop gone")
+
+        mocker.patch(
+            "ui.view_models.local_view_model.schedule_async",
+            side_effect=failing_schedule,
+        )
+
+        wp = LocalWallpaper(
+            path=tmp_path / "x.jpg",
+            filename="x.jpg",
+            size=1,
+            modified_time=1.0,
+            tags=[],
+        )
+
+        queued, message = local_view_model.queue_upscale(wp)
+
+        assert queued is True
+        assert local_view_model.upscaling_active_count == 0
+        assert local_view_model._failed_count == 1
+
+    def test_finish_upscale_emits_signal_on_main_thread(
+        self, local_view_model, mocker, tmp_path
+    ):
+        """upscaling-complete must be emitted via idle_add (main thread)."""
+        idle_add = mocker.patch(
+            "ui.view_models.local_view_model.GLib.idle_add",
+            side_effect=lambda func, *args: func(*args),
+        )
+
+        def fake_schedule(coro):
+            coro.close()
+            return None
+
+        mocker.patch(
+            "ui.view_models.local_view_model.schedule_async",
+            side_effect=fake_schedule,
+        )
+
+        received = []
+        local_view_model.connect(
+            "upscaling-complete",
+            lambda _o, success, message, path: received.append((success, path)),
+        )
+
+        wp = LocalWallpaper(
+            path=tmp_path / "y.jpg",
+            filename="y.jpg",
+            size=1,
+            modified_time=1.0,
+            tags=[],
+        )
+        local_view_model.queue_upscale(wp)
+        idle_add.reset_mock()
+
+        local_view_model._finish_upscale(wp, True, "done")
+
+        assert received == [(True, str(tmp_path / "y.jpg"))]
+        assert idle_add.called

@@ -7,6 +7,7 @@ import hashlib
 import logging
 import shutil
 import sys
+import threading
 from collections import deque
 from pathlib import Path
 
@@ -63,12 +64,17 @@ class LocalViewModel(BaseViewModel):
 
         # Upscaling queue system
         self._upscale_queue: deque = deque()
-        self._active_count = 0
+        self._upscale_active_count = 0
         self._completed_count = 0
         self._failed_count = 0
 
         # Tagging queue system
         self._tag_queue: deque = deque()
+        self._tag_active_count = 0
+
+        # Guards queue deques/counters mutated from both the GTK main thread
+        # (queue_upscale/queue_generate_tags) and the asyncio thread (_finish_*).
+        self._queue_lock = threading.Lock()
 
     def _load_last_wallpaper_path(self) -> str | None:
         """Load last set wallpaper path from config."""
@@ -108,12 +114,12 @@ class LocalViewModel(BaseViewModel):
     @GObject.Property(type=int)
     def upscaling_active_count(self) -> int:
         """Number of currently active upscaling operations"""
-        return self._active_count
+        return self._upscale_active_count
 
     @GObject.Property(type=int)
     def upscaling_total_count(self) -> int:
         """Total items being processed (queue + active)"""
-        return len(self._upscale_queue) + self._active_count
+        return len(self._upscale_queue) + self._upscale_active_count
 
     @GObject.Property(type=int)
     def tagging_queue_size(self) -> int:
@@ -123,7 +129,7 @@ class LocalViewModel(BaseViewModel):
     @GObject.Property(type=int)
     def tagging_active_count(self) -> int:
         """Number of currently active tagging operations"""
-        return self._active_count
+        return self._tag_active_count
 
     @GObject.Property(type=str)
     def current_wallpaper_path(self) -> str | None:
@@ -158,31 +164,62 @@ class LocalViewModel(BaseViewModel):
         except OSError:
             return None
 
+    def _set_current_wallpaper_path_idle(self, path: str | None) -> bool:
+        """Apply current wallpaper path change (main thread only)."""
+        self._current_wallpaper_path = path
+        self.notify("current-wallpaper-path")
+        return False
+
+    def _remove_wallpaper_idle(self, wallpaper: LocalWallpaper) -> bool:
+        """Remove a wallpaper from the list (main thread only)."""
+        if wallpaper in self._wallpapers:
+            self._wallpapers.remove(wallpaper)
+            self.notify("wallpapers")
+        return False
+
     def _emit_queue_changed(self):
-        """Emit signal when queue status changes."""
+        """Emit signal when queue status changes (thread-safe, marshals to UI)."""
+        with self._queue_lock:
+            queue_size = len(self._upscale_queue)
+            active_count = self._upscale_active_count
+        GLib.idle_add(
+            self._apply_queue_changed_idle,
+            queue_size,
+            active_count,
+        )
+
+    def _apply_queue_changed_idle(
+        self, queue_size: int, active_count: int
+    ) -> bool:
         self.notify("upscaling-queue-size")
         self.notify("upscaling-active-count")
         self.notify("upscaling-total-count")
-        self.emit(
-            "upscaling-queue-changed",
-            len(self._upscale_queue),
-            self._active_count,
-        )
+        self.emit("upscaling-queue-changed", queue_size, active_count)
+        return False
 
     def _emit_tagging_queue_changed(self):
-        """Emit signal when tagging queue status changes."""
+        """Emit signal when tagging queue status changes (thread-safe)."""
+        with self._queue_lock:
+            queue_size = len(self._tag_queue)
+            active_count = self._tag_active_count
+        GLib.idle_add(
+            self._apply_tagging_queue_changed_idle,
+            queue_size,
+            active_count,
+        )
+
+    def _apply_tagging_queue_changed_idle(
+        self, queue_size: int, active_count: int
+    ) -> bool:
         self.notify("tagging-queue-size")
         self.notify("tagging-active-count")
-        self.emit(
-            "tagging-queue-changed",
-            len(self._tag_queue),
-            self._active_count,
-        )
+        self.emit("tagging-queue-changed", queue_size, active_count)
+        return False
 
     async def load_wallpapers(self, recursive: bool = True) -> None:
         try:
-            self.is_busy = True
-            self.error_message = None
+            self._set_property_idle("is_busy", True)
+            self._set_property_idle("error_message", None)
 
             if self.pictures_dir:
                 self.local_service.pictures_dir = self.pictures_dir
@@ -191,18 +228,18 @@ class LocalViewModel(BaseViewModel):
                 recursive=recursive
             )
             self.search_query = ""
-            self._set_wallpapers(wallpapers)
+            GLib.idle_add(self._set_wallpapers, wallpapers)
 
         except Exception as e:
-            self.error_message = f"Failed to load wallpapers: {e}"
-            self._set_wallpapers([])
+            self._set_property_idle("error_message", f"Failed to load wallpapers: {e}")
+            GLib.idle_add(self._set_wallpapers, [])
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     async def search_wallpapers(self, query: str = "") -> None:
         try:
-            self.is_busy = True
-            self.error_message = None
+            self._set_property_idle("is_busy", True)
+            self._set_property_idle("error_message", None)
             self.search_query = query
 
             if not query or query.strip() == "":
@@ -214,50 +251,53 @@ class LocalViewModel(BaseViewModel):
                 GLib.idle_add(self._set_wallpapers, results)
 
         except Exception as e:
-            self.error_message = f"Failed to search wallpapers: {e}"
+            self._set_property_idle(
+                "error_message", f"Failed to search wallpapers: {e}"
+            )
             GLib.idle_add(self._set_wallpapers, [])
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     async def set_wallpaper(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         try:
-            self.is_busy = True
-            self.error_message = None
+            self._set_property_idle("is_busy", True)
+            self._set_property_idle("error_message", None)
             result = await self.wallpaper_setter.set_wallpaper_async(
                 str(wallpaper.path)
             )
             if result:
-                self._current_wallpaper_path = str(wallpaper.path)
                 self._save_last_wallpaper_path(str(wallpaper.path))
-                self.notify("current-wallpaper-path")
+                GLib.idle_add(
+                    self._set_current_wallpaper_path_idle, str(wallpaper.path)
+                )
                 return True, "Wallpaper set successfully"
             return False, "Failed to set wallpaper"
         except Exception as e:
-            self.error_message = str(e)
+            self._set_property_idle("error_message", str(e))
             return False, str(e)
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     async def delete_wallpaper(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         try:
-            self.is_busy = True
-            self.error_message = None
+            self._set_property_idle("is_busy", True)
+            self._set_property_idle("error_message", None)
 
             result = await self.local_service.delete_wallpaper_async(wallpaper.path)
 
             if result:
-                if wallpaper in self._wallpapers:
-                    self._wallpapers.remove(wallpaper)
-                    self.notify("wallpapers")
+                GLib.idle_add(self._remove_wallpaper_idle, wallpaper)
                 return True, f"Deleted '{wallpaper.filename}'"
 
             return False, "Failed to delete"
 
         except Exception as e:
-            self.error_message = f"Failed to delete wallpaper: {e}"
+            self._set_property_idle(
+                "error_message", f"Failed to delete wallpaper: {e}"
+            )
             return False, str(e)
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     async def refresh_wallpapers(self) -> None:
         self.search_query = ""
@@ -294,7 +334,7 @@ class LocalViewModel(BaseViewModel):
 
     async def _apply_filters_async(self, filters: dict) -> None:
         try:
-            self.is_busy = True
+            self._set_property_idle("is_busy", True)
 
             all_wallpapers = await self.local_service.get_wallpapers_async(
                 recursive=True
@@ -310,9 +350,9 @@ class LocalViewModel(BaseViewModel):
 
             GLib.idle_add(self._set_wallpapers, filtered)
         except Exception as e:
-            self.error_message = f"Failed to filter: {e}"
+            self._set_property_idle("error_message", f"Failed to filter: {e}")
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     def _apply_resolution_filter(
         self, wallpapers: list[LocalWallpaper], filters: dict
@@ -396,12 +436,12 @@ class LocalViewModel(BaseViewModel):
             return False, "Operation in progress"
 
         if not self.favorites_service:
-            self.error_message = "Favorites service not available"
+            self._set_property_idle("error_message", "Favorites service not available")
             return False, "Favorites service not available"
 
         try:
-            self.is_busy = True
-            self.error_message = None
+            self._set_property_idle("is_busy", True)
+            self._set_property_idle("error_message", None)
 
             path_hash = hashlib.sha256(str(wallpaper.path).encode()).hexdigest()[:16]
             wallpaper_id = f"local_{path_hash}"
@@ -432,10 +472,10 @@ class LocalViewModel(BaseViewModel):
             return True, f"Added '{wallpaper.filename}' to favorites"
 
         except Exception as e:
-            self.error_message = f"Failed to add to favorites: {e}"
+            self._set_property_idle("error_message", f"Failed to add to favorites: {e}")
             return False, str(e)
         finally:
-            self.is_busy = False
+            self._set_property_idle("is_busy", False)
 
     def _get_image_size(self, path: Path) -> tuple[int, int]:
         width, height = 1920, 1080
@@ -457,11 +497,12 @@ class LocalViewModel(BaseViewModel):
         Returns:
             Tuple of (queued, message)
         """
-        # Add to queue
-        self._upscale_queue.append(wallpaper)
+        with self._queue_lock:
+            # Add to queue
+            self._upscale_queue.append(wallpaper)
 
-        # Get queue size BEFORE processing (item is still in queue)
-        queue_size = len(self._upscale_queue)
+            # Get queue size BEFORE processing (item is still in queue)
+            queue_size = len(self._upscale_queue)
 
         # Emit queue changed (show toast will use this)
         self._emit_queue_changed()
@@ -472,19 +513,36 @@ class LocalViewModel(BaseViewModel):
         if queue_size == 1:
             return True, "Upscaling started..."
         else:
-            return True, f"Added to queue ({queue_size - self._active_count} waiting)"
+            with self._queue_lock:
+                waiting = queue_size - self._upscale_active_count
+            return True, f"Added to queue ({waiting} waiting)"
 
     def _process_upscale_queue(self):
         """Process items from the upscaling queue."""
-        while (
-            self._upscale_queue and self._active_count < self.MAX_CONCURRENT_UPSCALING
-        ):
-            wallpaper = self._upscale_queue.popleft()
-            self._active_count += 1
+        while True:
+            with self._queue_lock:
+                if (
+                    not self._upscale_queue
+                    or self._upscale_active_count
+                    >= self.MAX_CONCURRENT_UPSCALING
+                ):
+                    break
+                wallpaper = self._upscale_queue.popleft()
+                self._upscale_active_count += 1
             self._emit_queue_changed()
 
-            # Start async upscaling
+            self._schedule_upscale(wallpaper)
+
+    def _schedule_upscale(self, wallpaper: LocalWallpaper) -> None:
+        """Schedule an upscaling task; never leaks the active count (L12)."""
+        try:
             schedule_async(self._run_upscale_async(wallpaper))
+        except Exception:
+            with self._queue_lock:
+                self._upscale_active_count -= 1
+                self._failed_count += 1
+            logger.exception("Failed to schedule upscaling task")
+            self._emit_queue_changed()
 
     async def _run_upscale_async(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         """Run the actual upscaling process asynchronously.
@@ -620,14 +678,16 @@ class LocalViewModel(BaseViewModel):
 
     def _finish_upscale(self, wallpaper: LocalWallpaper, success: bool, message: str):
         """Handle completion of an upscaling operation."""
-        self._active_count -= 1
-        if success:
-            self._completed_count += 1
-        else:
-            self._failed_count += 1
+        with self._queue_lock:
+            self._upscale_active_count -= 1
+            if success:
+                self._completed_count += 1
+            else:
+                self._failed_count += 1
 
         self._emit_queue_changed()
-        self.emit("upscaling-complete", success, message, str(wallpaper.path))
+        # Signal handlers touch widgets/toasts - marshal to the main thread
+        self._emit_idle("upscaling-complete", success, message, str(wallpaper.path))
 
         # Process next item in queue
         self._process_upscale_queue()
@@ -641,9 +701,10 @@ class LocalViewModel(BaseViewModel):
         Returns:
             Tuple of (queued, message)
         """
-        self._tag_queue.append(wallpaper)
+        with self._queue_lock:
+            self._tag_queue.append(wallpaper)
 
-        queue_size = len(self._tag_queue)
+            queue_size = len(self._tag_queue)
 
         self._emit_tagging_queue_changed()
 
@@ -652,19 +713,37 @@ class LocalViewModel(BaseViewModel):
         if queue_size == 1:
             return True, "Generating tags..."
         else:
+            with self._queue_lock:
+                waiting = queue_size - self._tag_active_count
             return (
                 True,
-                f"Added to tag queue ({queue_size - self._active_count} waiting)",
+                f"Added to tag queue ({waiting} waiting)",
             )
 
     def _process_tag_queue(self):
         """Process items from the tagging queue."""
-        while self._tag_queue and self._active_count < self.MAX_CONCURRENT_TAGGING:
-            wallpaper = self._tag_queue.popleft()
-            self._active_count += 1
+        while True:
+            with self._queue_lock:
+                if (
+                    not self._tag_queue
+                    or self._tag_active_count >= self.MAX_CONCURRENT_TAGGING
+                ):
+                    break
+                wallpaper = self._tag_queue.popleft()
+                self._tag_active_count += 1
             self._emit_tagging_queue_changed()
 
+            self._schedule_tag(wallpaper)
+
+    def _schedule_tag(self, wallpaper: LocalWallpaper) -> None:
+        """Schedule a tagging task; never leaks the active count (L12)."""
+        try:
             schedule_async(self._run_tag_async(wallpaper))
+        except Exception:
+            with self._queue_lock:
+                self._tag_active_count -= 1
+            logger.exception("Failed to schedule tagging task")
+            self._emit_tagging_queue_changed()
 
     async def _run_tag_async(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         """Run the actual tag generation process asynchronously.
@@ -708,10 +787,12 @@ class LocalViewModel(BaseViewModel):
 
     def _finish_tag(self, wallpaper: LocalWallpaper, success: bool, message: str):
         """Handle completion of a tagging operation."""
-        self._active_count -= 1
+        with self._queue_lock:
+            self._tag_active_count -= 1
 
         self._emit_tagging_queue_changed()
-        self.emit("tagging-complete", success, message, str(wallpaper.path))
+        # Signal handlers touch widgets/toasts - marshal to the main thread
+        self._emit_idle("tagging-complete", success, message, str(wallpaper.path))
 
         self._process_tag_queue()
 

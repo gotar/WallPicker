@@ -1,7 +1,6 @@
 """Modern Preview Dialog component for wallpaper inspection."""
 
 import sys
-import threading
 from pathlib import Path
 
 import gi
@@ -12,6 +11,8 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 
 from gi.repository import Adw, Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
+
+from core.asyncio_integration import schedule_async  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -65,10 +66,18 @@ class PreviewDialog(Adw.Dialog):
         self.add_css_class("preview-dialog")
         self.set_transition_type(Adw.DialogTransitionType.COVER)
 
+        # Guard for widget access after the dialog has been closed (M19)
+        self._closed = False
+        self.connect("closed", self._on_dialog_closed)
+
         # Create UI
         self._create_ui()
         self._setup_shortcuts()
         self._load_image()
+
+    def _on_dialog_closed(self, dialog):
+        """Mark dialog closed so async completions stop touching widgets."""
+        self._closed = True
 
     def _create_ui(self):
         """Create dialog UI with split-view layout."""
@@ -317,7 +326,12 @@ class PreviewDialog(Adw.Dialog):
             self.favorite_btn.set_icon_name("non-starred-symbolic")
 
     def _load_image(self):
-        """Load wallpaper image asynchronously."""
+        """Load wallpaper image without ever touching GTK off the main thread.
+
+        The pixbuf is decoded on a worker (via the asyncio integration);
+        only the Gdk.Texture construction and widget updates run on the GTK
+        main thread, dispatched through GLib.idle_add.
+        """
         # Determine image source
         image_source = None
         if self.wallpaper.source.value == "wallhaven":
@@ -331,67 +345,56 @@ class PreviewDialog(Adw.Dialog):
             self._on_image_load_failed("No image source available")
             return
 
-        # Load image in background thread
-        def load_in_thread():
-            try:
-                if self.thumbnail_cache and self.wallpaper.source.value == "wallhaven":
-                    # Use thumbnail cache for remote images
-                    cached = self.thumbnail_cache.get_thumbnail(image_source)
-                    if cached:
-                        image_path = str(cached)
-                    else:
-                        # For remote images, we need to use async operations
-                        # Import here to avoid circular dependency
-                        import asyncio
-
-                        async def fetch_image():
-                            return str(
-                                await self.thumbnail_cache.download_and_cache(
-                                    image_source, None
-                                )
-                            )
-
-                        # Create a new event loop for this thread since we're in a background thread
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            image_path = loop.run_until_complete(
-                                asyncio.wait_for(fetch_image(), timeout=30)
-                            )
-                        finally:
-                            loop.close()
+        async def load_image_async():
+            image_path = image_source
+            if self.thumbnail_cache and self.wallpaper.source.value == "wallhaven":
+                # Use thumbnail cache for remote images
+                cached = self.thumbnail_cache.get_thumbnail(image_source)
+                if cached:
+                    image_path = str(cached)
                 else:
-                    # Load local file directly
-                    image_path = image_source
+                    # For remote images, we need to use async operations
+                    import asyncio
 
-                # Load as Gdk.Texture
-                from gi.repository import GdkPixbuf
+                    image_path = str(
+                        await self.thumbnail_cache.download_and_cache(
+                            image_source, None
+                        )
+                    )
 
-                pixbuf = GdkPixbuf.Pixbuf.new_from_file(str(image_path))
-                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
-                return texture
+            # Decode the pixbuf off the main thread (GdkPixbuf is thread-safe
+            # for loading); the Gdk.Texture is created later on the main thread.
+            import asyncio
+
+            return await asyncio.to_thread(
+                GdkPixbuf.Pixbuf.new_from_file, str(image_path)
+            )
+
+        def apply_pixbuf(future):
+            """Apply the decoded pixbuf on the GTK main thread."""
+            if self._closed:
+                return
+
+            self.loading_spinner.stop()
+            self.loading_spinner.set_visible(False)
+
+            try:
+                pixbuf = future.result()
             except Exception as e:
                 import logging
 
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error loading image: {e}", exc_info=True)
-                return None
+                pixbuf = None
 
-        def on_loaded(result):
-            self.loading_spinner.stop()
-            self.loading_spinner.set_visible(False)
-
-            if result:
-                self.image.set_paintable(result)
+            if pixbuf is not None:
+                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+                self.image.set_paintable(texture)
             else:
                 self._on_image_load_failed("Failed to load image")
 
-        def load_and_schedule():
-            result = load_in_thread()
-            GLib.idle_add(on_loaded, result)
-
-        thread = threading.Thread(target=load_and_schedule, daemon=True)
-        thread.start()
+        future = schedule_async(load_image_async())
+        future.add_done_callback(lambda fut: GLib.idle_add(apply_pixbuf, fut))
 
     def _load_image_sync(self, image_source):
         """Fallback synchronous image loader."""

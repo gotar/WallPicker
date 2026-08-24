@@ -118,7 +118,10 @@ class TagGenerationService(BaseService):
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 model, preprocess = clip.load("ViT-B/32", device=device)
 
-                image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
+                # Use a context manager so the image file handle is always
+                # closed (L5: Pillow handle leak).
+                with Image.open(image_path) as img:
+                    image = preprocess(img).unsqueeze(0).to(device)
 
                 common_tags = [
                     "nature",

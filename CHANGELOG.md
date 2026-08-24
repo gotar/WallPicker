@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.1] - 2026-08-24
+
+### Fixed
+- The Local tab now refreshes automatically after setting a wallpaper from
+  Wallhaven: both set paths emit 'wallpaper-downloaded' so the library
+  reload picks up the new file without a manual refresh
+
 ## [2.6.0] - 2026-08-24
 
 ### Added

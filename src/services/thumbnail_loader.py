@@ -106,45 +106,25 @@ class ThumbnailLoader:
         return None
 
     def load_thumbnail_async(
-        self, path_or_url: str, callback: Callable[[Gdk.Texture | None], None]
+        self,
+        path_or_url: str,
+        callback: Callable[[Gdk.Texture | None], None],
+        allow_retry: bool = True,
     ) -> None:
         """Load thumbnail asynchronously and invoke callback on main thread.
 
         Args:
             path_or_url: Local file path or remote URL
             callback: Function to call with Gdk.Texture or None on failure
+            allow_retry: When True (default), a decode failure of cached bytes
+                invalidates the corrupt entry and retries exactly once.
         """
 
-        def _load_thumbnail():
+        def _load_thumbnail(retry_allowed: bool = allow_retry):
             try:
                 # Handle remote URLs with caching
                 if path_or_url.startswith(("http://", "https://")):
-                    if self._thumbnail_cache:
-                        logger.debug(f"Loading remote thumbnail: {path_or_url[:60]}...")
-                        thumbnail_path = self._thumbnail_cache.get_or_download_sync(
-                            path_or_url
-                        )
-                        if thumbnail_path and thumbnail_path.exists():
-                            # Read file bytes in worker thread
-                            try:
-                                data = thumbnail_path.read_bytes()
-
-                                # Schedule texture creation in main thread
-                                def create_remote_texture():
-                                    try:
-                                        texture = Gdk.Texture.new_from_bytes(
-                                            GLib.Bytes.new(data)
-                                        )
-                                        callback(texture)
-                                    except Exception:
-                                        callback(None)
-
-                                GLib.idle_add(create_remote_texture)
-                                return
-                            except Exception:
-                                pass
-
-                    GLib.idle_add(lambda: callback(None))
+                    self._load_remote(path_or_url, callback, allow_retry=retry_allowed)
                     return
 
                 # Handle local files - use thumbnail generation
@@ -162,7 +142,21 @@ class ThumbnailLoader:
                                     )
                                     callback(texture)
                                 except Exception:
-                                    callback(None)
+                                    if retry_allowed:
+                                        # Corrupt in-memory bytes: drop the entry
+                                        # and reload from disk exactly once.
+                                        logger.warning(
+                                            f"Cached thumbnail for {path_or_url} "
+                                            "failed to decode; regenerating"
+                                        )
+                                        self._local_thumbnail_cache.pop(
+                                            path_or_url, None
+                                        )
+                                        self._executor.submit(
+                                            _load_thumbnail, False
+                                        )
+                                    else:
+                                        callback(None)
 
                             GLib.idle_add(create_cached_texture)
                             return
@@ -182,8 +176,15 @@ class ThumbnailLoader:
                                 )
                                 callback(texture)
                             except Exception:
+                                # Corrupt-but-present cache entry: drop it so a
+                                # later load regenerates instead of serving the
+                                # same broken bytes forever.
+                                logger.warning(
+                                    f"Thumbnail for {path_or_url} failed to decode; "
+                                    "dropping corrupt cache entry"
+                                )
+                                self._drop_corrupt_local_entry(path_or_url)
                                 callback(None)
-
                         GLib.idle_add(create_local_texture)
                         return
 
@@ -196,6 +197,67 @@ class ThumbnailLoader:
             GLib.idle_add(lambda: callback(None))
 
         self._executor.submit(_load_thumbnail)
+
+    def _load_remote(self, url: str, callback, allow_retry: bool = True) -> None:
+        """Load a remote thumbnail via the disk cache (runs on the executor).
+
+        If Gdk fails to decode the cached bytes, the corrupt cache entry is
+        invalidated and the thumbnail re-downloaded exactly once before we
+        give up and report failure.
+        """
+        try:
+            if not self._thumbnail_cache:
+                GLib.idle_add(lambda: callback(None))
+                return
+
+            logger.debug(f"Loading remote thumbnail: {url[:60]}...")
+            thumbnail_path = self._thumbnail_cache.get_or_download_sync(url)
+            if thumbnail_path and thumbnail_path.exists():
+                # Read file bytes in worker thread
+                data = thumbnail_path.read_bytes()
+
+                # Schedule texture creation in main thread
+                def create_remote_texture():
+                    try:
+                        texture = Gdk.Texture.new_from_bytes(GLib.Bytes.new(data))
+                        callback(texture)
+                    except Exception:
+                        logger.warning(
+                            f"Remote thumbnail for {url[:60]} failed to decode"
+                            + ("; retrying after invalidation" if allow_retry else "")
+                        )
+                        if allow_retry:
+                            self._retry_remote_after_decode_failure(url, callback)
+                        else:
+                            callback(None)
+
+                GLib.idle_add(create_remote_texture)
+                return
+        except Exception as e:
+            logger.error(f"Failed to load remote thumbnail from {url}: {e}", exc_info=True)
+
+        GLib.idle_add(lambda: callback(None))
+
+    def _retry_remote_after_decode_failure(self, url: str, callback) -> None:
+        """Invalidate a corrupt remote cache entry and re-download once."""
+        cache = self._thumbnail_cache
+        if cache is not None and hasattr(cache, "invalidate"):
+            try:
+                cache.invalidate(url)
+            except Exception as e:
+                logger.warning(f"Failed to invalidate cache for {url[:60]}: {e}")
+        # Heavy work stays off the main thread: resubmit to the worker pool.
+        self._executor.submit(self._load_remote, url, callback, False)
+
+    def _drop_corrupt_local_entry(self, path_or_url: str) -> None:
+        """Drop a corrupt local thumbnail from the in-memory and disk caches."""
+        self._local_thumbnail_cache.pop(path_or_url, None)
+        try:
+            source = Path(path_or_url)
+            if source.exists():
+                self._get_local_thumbnail_path(path_or_url).unlink(missing_ok=True)
+        except OSError as e:
+            logger.warning(f"Failed to remove corrupt thumbnail for {path_or_url}: {e}")
 
     def shutdown(self) -> None:
         """Shutdown the executor."""

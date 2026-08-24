@@ -24,37 +24,25 @@ def test_config_with_values():
 
 
 def test_config_validation_valid():
-    """Test Config validation with valid data."""
-    temp_dir = Path("/tmp/wallpicker_config_test")
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    """Test Config validation accepts any Path value (type check only).
 
-    config = Config(local_wallpapers_dir=temp_dir)
+    Existence checks moved to ConfigService (L16): a vanished wallpapers dir
+    must never block saving the config.
+    """
+    config = Config(local_wallpapers_dir=Path("/nonexistent/but/type-valid"))
     config.validate()  # Should not raise
 
-    # Cleanup
-    temp_dir.rmdir()
 
-
-def test_config_validation_invalid_dir():
-    """Test Config validation with non-existent directory."""
-    config = Config(local_wallpapers_dir=Path("/nonexistent/path"))
-    with pytest.raises(ConfigError):
+def test_config_validation_non_path_raises():
+    """Test Config validation still rejects non-Path values."""
+    config = Config(local_wallpapers_dir="/a/string/not/a/path")
+    with pytest.raises(ConfigError, match="must be a Path"):
         config.validate()
 
 
-def test_config_validation_file_instead_of_dir():
-    """Test Config validation when path is a file."""
-    import tempfile
-
-    with tempfile.NamedTemporaryFile(delete=False) as f:
-        temp_file = Path(f.name)
-
-    try:
-        config = Config(local_wallpapers_dir=temp_file)
-        with pytest.raises(ConfigError):
-            config.validate()
-    finally:
-        temp_file.unlink()
+def test_config_validation_none_ok():
+    """Test Config validation passes when no directory is configured."""
+    Config().validate()  # Should not raise
 
 
 def test_config_pictures_dir():

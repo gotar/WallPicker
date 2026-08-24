@@ -4,6 +4,7 @@ import hashlib
 import io
 import threading
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from PIL import Image
@@ -336,3 +337,84 @@ class TestFailureTolerance:
         result = load_with_callback(loader, "https://example.com/thumb.jpg")
 
         assert result is None
+
+
+class TestCorruptCacheInvalidation:
+    """M4: decode failure at the consumption point must invalidate the
+    corrupt cache entry and re-download / regenerate exactly once."""
+
+    def test_remote_corrupt_cache_invalidated_and_redownloaded(
+        self, loader: ThumbnailLoader, tmp_path: Path, mocker, sync_idle_add
+    ):
+        corrupt_file = tmp_path / "corrupt.jpg"
+        corrupt_file.write_bytes(b"garbage-not-an-image")
+        good_file = make_image(tmp_path / "good.jpg")
+        cache_mock = mocker.MagicMock()
+        cache_mock.get_or_download_sync.side_effect = [corrupt_file, good_file]
+        loader._thumbnail_cache = cache_mock
+        mocker.patch(
+            "gi.repository.Gdk.Texture.new_from_bytes",
+            side_effect=[Exception("decode failure"), MagicMock()],
+        )
+
+        texture = load_with_callback(loader, "https://example.com/thumb.jpg")
+
+        assert texture is not None
+        # The corrupt entry was invalidated (by URL) and re-downloaded once.
+        cache_mock.invalidate.assert_called_once_with("https://example.com/thumb.jpg")
+        assert cache_mock.get_or_download_sync.call_count == 2
+
+    def test_remote_corrupt_twice_gives_up_after_one_retry(
+        self, loader: ThumbnailLoader, tmp_path: Path, mocker, sync_idle_add
+    ):
+        corrupt_a = tmp_path / "corrupt-a.jpg"
+        corrupt_a.write_bytes(b"garbage-a")
+        corrupt_b = tmp_path / "corrupt-b.jpg"
+        corrupt_b.write_bytes(b"garbage-b")
+        cache_mock = mocker.MagicMock()
+        cache_mock.get_or_download_sync.side_effect = [corrupt_a, corrupt_b]
+        loader._thumbnail_cache = cache_mock
+        mocker.patch(
+            "gi.repository.Gdk.Texture.new_from_bytes",
+            side_effect=Exception("still broken"),
+        )
+
+        result = load_with_callback(loader, "https://example.com/thumb.jpg")
+
+        assert result is None
+        # Exactly one invalidation+retry; no infinite loop.
+        cache_mock.invalidate.assert_called_once_with("https://example.com/thumb.jpg")
+        assert cache_mock.get_or_download_sync.call_count == 2
+
+    def test_memory_cached_corrupt_bytes_invalidated_and_regenerated(
+        self, loader: ThumbnailLoader, tmp_path: Path, mocker, sync_idle_add
+    ):
+        img = make_image(tmp_path / "regen.png")  # valid source on disk
+        loader._local_thumbnail_cache[str(img)] = b"corrupt-memory-bytes"
+        mocker.patch(
+            "gi.repository.Gdk.Texture.new_from_bytes",
+            side_effect=[Exception("decode failure"), MagicMock()],
+        )
+
+        texture = load_with_callback(loader, str(img))
+
+        assert texture is not None
+        # Corrupt memory entry was dropped and regenerated from disk.
+        assert loader._local_thumbnail_cache[str(img)] != b"corrupt-memory-bytes"
+
+    def test_corrupt_disk_thumbnail_is_deleted_on_decode_failure(
+        self, loader: ThumbnailLoader, tmp_path: Path, mocker, sync_idle_add
+    ):
+        img = make_image(tmp_path / "disk-corrupt.png")
+        thumb_path = loader._get_local_thumbnail_path(str(img))
+        thumb_path.parent.mkdir(parents=True, exist_ok=True)
+        thumb_path.write_bytes(b"planted-garbage")  # newer than source => served
+        mocker.patch(
+            "gi.repository.Gdk.Texture.new_from_bytes",
+            side_effect=Exception("decode failure"),
+        )
+        load_with_callback(loader, str(img))  # callback(None) is fine here
+
+        # The corrupt on-disk thumbnail entry must have been removed so the
+        # next load regenerates it instead of serving garbage forever.
+        assert not thumb_path.exists()

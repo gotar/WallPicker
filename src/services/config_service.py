@@ -72,6 +72,26 @@ class ConfigService(BaseService):
             )
             raise ServiceError(f"Failed to load configuration: {e}") from e
 
+    def _ensure_wallpapers_dir(self, config: Config) -> None:
+        """Warn and recreate the wallpapers dir if it vanished externally.
+
+        L16: saves must never fail merely because the directory was removed
+        outside the app. A non-directory at the path is warned about but does
+        not block saving either (we never delete user data to recreate it).
+        """
+        wallpapers_dir = config.local_wallpapers_dir
+        if wallpapers_dir is None or not isinstance(wallpapers_dir, Path):
+            return
+        if not wallpapers_dir.exists():
+            self.log_warning(
+                f"Wallpapers directory missing, recreating: {wallpapers_dir}"
+            )
+            wallpapers_dir.mkdir(parents=True, exist_ok=True)
+        elif not wallpapers_dir.is_dir():
+            self.log_warning(
+                f"Wallpapers path is not a directory: {wallpapers_dir}"
+            )
+
     def save_config(self, config: Config) -> None:
         """Save configuration domain model to file.
 
@@ -82,7 +102,8 @@ class ConfigService(BaseService):
             ServiceError: If config file cannot be written
         """
         try:
-            config.validate()  # Validate before saving
+            config.validate()  # Validate before saving (type checks only)
+            self._ensure_wallpapers_dir(config)  # warn-and-recreate, never fail
             config_dict = config.to_dict()
 
             self.config_dir.mkdir(parents=True, exist_ok=True)

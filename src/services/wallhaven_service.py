@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,15 @@ class WallhavenService(BaseService):
     BASE_URL = "https://wallhaven.cc/api/v1"
     RATE_LIMIT = 45  # requests per minute
     REQUEST_INTERVAL = 60 / RATE_LIMIT  # seconds between requests
+
+    # HTTP 429 handling: up to 3 retries with exponential backoff (1s/2s/4s).
+    MAX_RETRIES = 3
+    RETRY_BACKOFF_SECONDS = (1.0, 2.0, 4.0)
+
+    # L6: explicit timeouts. aiohttp's default total timeout is 5 minutes,
+    # far too long for API calls; downloads get a longer, still-bounded cap.
+    API_TIMEOUT_SECONDS = 30
+    DOWNLOAD_TIMEOUT_SECONDS = 120
 
     PRESETS = {
         "Anime": {"purity": "sfw", "categories": "010"},
@@ -38,6 +48,9 @@ class WallhavenService(BaseService):
         super().__init__()
         self.api_key = api_key
         self._last_request_time = 0.0
+        # Serializes read-sleep-update in _rate_limit(): without it two
+        # concurrent requests both read the stale timestamp and fire together.
+        self._rate_lock = asyncio.Lock()
         self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -47,19 +60,44 @@ class WallhavenService(BaseService):
             if self.api_key:
                 headers["X-API-Key"] = self.api_key
 
-            self._session = aiohttp.ClientSession(headers=headers)
+            self._session = aiohttp.ClientSession(
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=self.API_TIMEOUT_SECONDS),
+            )
 
         return self._session
 
     async def _rate_limit(self) -> None:
         """Enforce rate limiting between requests."""
-        now = asyncio.get_event_loop().time()
-        time_since_last = now - self._last_request_time
+        # The whole check-sleep-update sequence must be atomic: concurrent
+        # callers otherwise all observe the same stale timestamp.
+        async with self._rate_lock:
+            now = asyncio.get_event_loop().time()
+            time_since_last = now - self._last_request_time
 
-        if time_since_last < self.REQUEST_INTERVAL:
-            await asyncio.sleep(self.REQUEST_INTERVAL - time_since_last)
+            if time_since_last < self.REQUEST_INTERVAL:
+                await asyncio.sleep(self.REQUEST_INTERVAL - time_since_last)
 
-        self._last_request_time = asyncio.get_event_loop().time()
+            self._last_request_time = asyncio.get_event_loop().time()
+
+    async def _sleep_retry_delay(self, headers, attempt: int) -> None:
+        """Sleep before retrying after an HTTP 429 response.
+
+        Honors the Retry-After header when present (never shorter than our
+        own backoff), otherwise uses exponential backoff 1s/2s/4s.
+        """
+        delay = self.RETRY_BACKOFF_SECONDS[min(attempt, len(self.RETRY_BACKOFF_SECONDS)) - 1]
+        retry_after = (headers or {}).get("Retry-After")
+        if retry_after is not None:
+            try:
+                delay = max(delay, float(retry_after))
+            except ValueError:
+                pass
+        self.log_warning(
+            f"Wallhaven rate limited (HTTP 429), retry {attempt}/{self.MAX_RETRIES} "
+            f"in {delay:.1f}s"
+        )
+        await asyncio.sleep(delay)
 
     async def search(
         self,
@@ -93,10 +131,8 @@ class WallhavenService(BaseService):
             seed: Random seed for consistent random results (6 alphanumeric chars)
 
         Returns:
-            Tuple of (wallpapers list, metadata dict)
+            wallpapers list, metadata dict)
         """
-        await self._rate_limit()
-
         params = {
             "q": query,
             "categories": categories,
@@ -121,11 +157,23 @@ class WallhavenService(BaseService):
         try:
             session = await self._get_session()
             url = f"{self.BASE_URL}/search"
-            async with session.get(url, params=params) as response:
-                if response.status != 200:
-                    response.raise_for_status()
-
-                data = await response.json()
+            attempt = 0
+            while True:
+                await self._rate_limit()
+                async with session.get(url, params=params) as response:
+                    if response.status == 429:
+                        attempt += 1
+                        if attempt > self.MAX_RETRIES:
+                            raise ServiceError(
+                                "Wallhaven rate limit exceeded (HTTP 429) after "
+                                f"{self.MAX_RETRIES} retries"
+                            )
+                        await self._sleep_retry_delay(response.headers, attempt)
+                        continue
+                    if response.status != 200:
+                        response.raise_for_status()
+                    data = await response.json()
+                    break
 
             wallpapers: list[Wallpaper] = []
             for item in data.get("data", []):
@@ -190,31 +238,54 @@ class WallhavenService(BaseService):
 
         Returns:
             True if successful, False otherwise
-        """
-        await self._rate_limit()
 
+        Raises:
+            ServiceError: If the server keeps responding with HTTP 429 after
+                all retries are exhausted.
+        """
         session = await self._get_session()
-        # Write to a .part file first so an interrupted download never leaves a
-        # truncated file that would later pass the "already downloaded" check.
-        part_path = dest.with_name(dest.name + ".part")
+        # Write to a uniquely-named .part file first so an interrupted download
+        # never leaves a truncated file that would later pass the "already
+        # downloaded" check. The uuid suffix also prevents two concurrent
+        # downloads of the SAME destination from interleaving writes into one
+        # shared partial file.
+        part_path = dest.with_name(
+            f"{dest.name}.{uuid.uuid4().hex}.part"
+        )
 
         try:
             self.log_info(f"Downloading wallpaper {wallpaper.id}")
 
             dest.parent.mkdir(parents=True, exist_ok=True)
 
-            async with session.get(wallpaper.path) as response:
-                response.raise_for_status()
-                total_size = int(response.headers.get("content-length", 0))
-                downloaded = 0
+            attempt = 0
+            while True:
+                await self._rate_limit()
+                async with session.get(
+                    wallpaper.path,
+                    timeout=aiohttp.ClientTimeout(total=self.DOWNLOAD_TIMEOUT_SECONDS),
+                ) as response:
+                    if response.status == 429:
+                        attempt += 1
+                        if attempt > self.MAX_RETRIES:
+                            raise ServiceError(
+                                "Wallhaven rate limit exceeded (HTTP 429) after "
+                                f"{self.MAX_RETRIES} retries"
+                            )
+                        await self._sleep_retry_delay(response.headers, attempt)
+                        continue
+                    response.raise_for_status()
+                    total_size = int(response.headers.get("content-length", 0))
+                    downloaded = 0
 
-                with open(part_path, "wb") as f:
-                    async for chunk in response.content.iter_chunked(8192):
-                        f.write(chunk)
-                        downloaded += len(chunk)
+                    with open(part_path, "wb") as f:
+                        async for chunk in response.content.iter_chunked(8192):
+                            f.write(chunk)
+                            downloaded += len(chunk)
 
-                        if progress_callback and total_size > 0:
-                            progress_callback(downloaded, total_size)
+                            if progress_callback and total_size > 0:
+                                progress_callback(downloaded, total_size)
+                break
 
             os.replace(part_path, dest)
             self.log_debug(f"Downloaded wallpaper to {dest}")

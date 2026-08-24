@@ -126,6 +126,20 @@ class ThumbnailCache(BaseService):
         self.log_debug(f"Cache hit: {url[:50]}...")
         return cache_path
 
+    def invalidate(self, url: str) -> None:
+        """Delete the cache entry for a URL.
+
+        Used when a cached file turns out to be corrupt (decode failure at
+        the consumption point), so the next load re-downloads it instead of
+        serving the same broken bytes forever.
+        """
+        cache_path = self._get_cache_path(url)
+        try:
+            cache_path.unlink(missing_ok=True)
+            self.log_debug(f"Invalidated cache entry: {url[:50]}...")
+        except OSError as e:
+            self.log_warning(f"Failed to invalidate cache entry {cache_path}: {e}")
+
     async def download_and_cache(
         self, url: str, session: aiohttp.ClientSession
     ) -> Path:

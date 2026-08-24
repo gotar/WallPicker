@@ -80,20 +80,51 @@ def test_save_config(config_service: ConfigService, temp_dir: Path):
     assert saved_data["wallhaven_api_key"] == "test-key"
 
 
-def test_save_config_validation(config_service: ConfigService, temp_dir: Path):
-    """Test saving config with invalid data."""
-    # Create directory
-    temp_dir.mkdir(parents=True, exist_ok=True)
+def test_save_config_recreates_missing_wallpapers_dir(
+    config_service: ConfigService, temp_dir: Path, mocker
+):
+    """L16: a vanished wallpapers dir must not fail the save — warn and
+    recreate it instead."""
+    missing_dir = temp_dir / "vanished"
+    config = Config(local_wallpapers_dir=missing_dir, wallhaven_api_key="k")
 
-    # Try to save with non-existent directory
-    # Note: Config validation requires directory to exist
-    config = Config(
-        local_wallpapers_dir=Path("/nonexistent/path"),
-        wallhaven_api_key="test-key",
-    )
+    warn_spy = mocker.spy(config_service, "log_warning")
+    config_service.save_config(config)  # Must not raise
 
-    with pytest.raises(ServiceError, match="Failed to save configuration"):
-        config_service.save_config(config)
+    assert missing_dir.is_dir(), "missing wallpapers dir must be recreated"
+    assert warn_spy.called
+    with open(config_service.config_file) as f:
+        saved_data = json.load(f)
+    assert saved_data["local_wallpapers_dir"] == str(missing_dir)
+
+
+def test_save_config_warns_but_saves_when_path_is_file(
+    config_service: ConfigService, temp_dir: Path, mocker
+):
+    """L16: a non-directory at the wallpapers path warns but still saves."""
+    blocker = temp_dir / "blocker"
+    blocker.write_text("i am a file")
+    config = Config(local_wallpapers_dir=blocker)
+
+    warn_spy = mocker.spy(config_service, "log_warning")
+    config_service.save_config(config)  # Must not raise
+
+    assert warn_spy.called
+    assert config_service.config_file.exists()
+
+
+def test_save_config_no_warning_when_dir_exists(
+    config_service: ConfigService, temp_dir: Path, mocker
+):
+    """No warning when the wallpapers dir is present and healthy."""
+    pictures = temp_dir / "pictures"
+    pictures.mkdir()
+    config = Config(local_wallpapers_dir=pictures)
+
+    warn_spy = mocker.spy(config_service, "log_warning")
+    config_service.save_config(config)
+
+    assert not warn_spy.called
 
 
 def test_legacy_get_method(config_service: ConfigService, temp_dir: Path):

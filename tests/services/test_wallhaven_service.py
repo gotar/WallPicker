@@ -1,5 +1,8 @@
 """Tests for WallhavenService refactored implementation."""
 
+import asyncio
+import os
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -13,6 +16,13 @@ from domain.wallpaper import (
     WallpaperSource,
 )
 from services.wallhaven_service import WallhavenService
+
+
+def patch_sleep_recorder(mocker):
+    """Patch asyncio.sleep with an AsyncMock recording requested delays."""
+    recorded: list[float] = []
+    mocker.patch("asyncio.sleep", new=AsyncMock(side_effect=recorded.append))
+    return recorded
 
 
 class MockAsyncContextManager:
@@ -65,7 +75,10 @@ class TestGetSession:
         with patch("aiohttp.ClientSession") as mock_session_cls:
             await service._get_session()
 
-            mock_session_cls.assert_called_once_with(headers={"X-API-Key": "test_key"})
+            mock_session_cls.assert_called_once_with(
+                headers={"X-API-Key": "test_key"},
+                timeout=aiohttp.ClientTimeout(total=30),
+            )
 
     async def test_create_session_without_api_key(self):
         """Test creating session without API key."""
@@ -75,7 +88,9 @@ class TestGetSession:
             await service._get_session()
 
             # Even without API key, headers={} is passed
-            mock_session_cls.assert_called_once_with(headers={})
+            mock_session_cls.assert_called_once_with(
+                headers={}, timeout=aiohttp.ClientTimeout(total=30)
+            )
 
     async def test_reuse_existing_session(self):
         """Test reusing existing session."""
@@ -95,7 +110,9 @@ class TestGetSession:
             await service._get_session()
 
             # Even without API key, headers={} is passed
-            mock_session_cls.assert_called_once_with(headers={})
+            mock_session_cls.assert_called_once_with(
+                headers={}, timeout=aiohttp.ClientTimeout(total=30)
+            )
 
 
 class TestRateLimit:
@@ -559,6 +576,326 @@ class TestDownload:
                 # ...and no .part file left on disk either
                 assert not dest.with_name(dest.name + ".part").exists()
                 assert not list(tmp_path.rglob("*.part"))
+
+
+class TestRateLimitConcurrency:
+    """M5: concurrent _rate_limit calls must be serialized by a lock."""
+
+    async def test_concurrent_calls_each_wait_a_full_interval(self):
+        """Two simultaneous calls must serialize: the second observes the
+        first's timestamp update and waits another full interval.
+        Without the lock both read the stale timestamp and only one
+        interval of spacing is enforced in total."""
+        import asyncio
+
+        service = WallhavenService()
+        service.REQUEST_INTERVAL = 0.1
+        loop = asyncio.get_running_loop()
+        # A request was just served; the next one must wait one interval...
+        service._last_request_time = loop.time()
+
+        completions = []
+
+        async def call():
+            await service._rate_limit()
+            completions.append(loop.time())
+
+        start = loop.time()
+        await asyncio.gather(call(), call())
+        total = loop.time() - start
+
+        # Serialized: two full intervals of waiting (>= 2x, with tolerance),
+        # not the single shared wait the racy version produced (~1x).
+        assert total >= service.REQUEST_INTERVAL * 2 * 0.9
+        assert total < service.REQUEST_INTERVAL * 10
+        assert len(completions) == 2
+
+    async def test_lock_created_per_instance(self):
+        import asyncio
+
+        s1 = WallhavenService()
+        s2 = WallhavenService()
+        assert isinstance(s1._rate_lock, asyncio.Lock)
+        assert s1._rate_lock is not s2._rate_lock
+
+
+class TestSearch429Retry:
+    """M5: HTTP 429 must trigger up to 3 retries with 1s/2s/4s backoff,
+    honoring Retry-After, then raise ServiceError."""
+
+    @pytest.fixture
+    def wallhaven_service(self):
+        return WallhavenService()
+
+    @staticmethod
+    def _response(status, headers=None):
+        resp = MagicMock()
+        resp.status = status
+        resp.headers = headers or {}
+        if status == 200:
+            resp.raise_for_status = MagicMock()
+            resp.json = AsyncMock(return_value={"data": [], "meta": {}})
+        else:
+            resp.raise_for_status = MagicMock(
+                side_effect=aiohttp.ClientResponseError(
+                    MagicMock(), (), status=status, message=f"HTTP {status}"
+                )
+            )
+        return MockAsyncContextManager(resp)
+
+    async def test_429_retries_then_succeeds(
+        self, wallhaven_service, mocker
+    ):
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(
+            side_effect=[
+                self._response(429),
+                self._response(429),
+                self._response(200),
+            ]
+        )
+        with patch.object(wallhaven_service, "_get_session", return_value=mock_session):
+            mocker.patch.object(wallhaven_service, "_rate_limit", new=AsyncMock())
+            recorded = patch_sleep_recorder(mocker)
+            wallpapers, meta = await wallhaven_service.search(query="test")
+
+        assert wallpapers == []
+        assert meta == {}
+        assert mock_session.get.call_count == 3
+        assert recorded == [1.0, 2.0]
+
+    async def test_429_honors_retry_after_header(
+        self, wallhaven_service, mocker
+    ):
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(
+            side_effect=[self._response(429, {"Retry-After": "7"}), self._response(200)]
+        )
+        with patch.object(wallhaven_service, "_get_session", return_value=mock_session):
+            mocker.patch.object(wallhaven_service, "_rate_limit", new=AsyncMock())
+            recorded = patch_sleep_recorder(mocker)
+            await wallhaven_service.search()
+
+        assert recorded == [7.0]
+
+    async def test_429_exhausted_retries_raise_service_error(
+        self, wallhaven_service, mocker
+    ):
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(
+            side_effect=lambda *a, **kw: self._response(429)
+        )
+        with patch.object(wallhaven_service, "_get_session", return_value=mock_session):
+            mocker.patch.object(wallhaven_service, "_rate_limit", new=AsyncMock())
+            recorded = patch_sleep_recorder(mocker)
+            with pytest.raises(ServiceError, match="[Rr]ate [Ll]imit"):
+                await wallhaven_service.search()
+
+        # Initial attempt + 3 retries
+        assert mock_session.get.call_count == 4
+        assert recorded == [1.0, 2.0, 4.0]
+
+
+class TestDownload429Retry:
+    """M5: download() must also retry on HTTP 429 and raise when exhausted."""
+
+    @pytest.fixture
+    def wallhaven_service(self):
+        return WallhavenService()
+
+    @pytest.fixture
+    def wallpaper(self):
+        return Wallpaper(
+            id="abc123",
+            url="https://wallhaven.cc/w/abc123",
+            path="https://w.wallhaven.cc/full/abc123.jpg",
+            resolution=Resolution(1920, 1080),
+            source=WallpaperSource.WALLHAVEN,
+            category="general",
+            purity=WallpaperPurity.SFW,
+        )
+
+    @staticmethod
+    def _download_response(status=200, body=b"image-bytes"):
+        resp = MagicMock()
+        resp.status = status
+        resp.headers = {"content-length": str(len(body))}
+        if status == 200:
+            resp.raise_for_status = MagicMock()
+
+            async def iter_chunked(n):
+                for i in range(0, len(body), n):
+                    yield body[i : i + n]
+
+            resp.content.iter_chunked = iter_chunked
+        else:
+            resp.raise_for_status = MagicMock(
+                side_effect=aiohttp.ClientResponseError(
+                    MagicMock(), (), status=status, message=f"HTTP {status}"
+                )
+            )
+        return MockAsyncContextManager(resp)
+
+    async def test_download_429_retries_then_succeeds(
+        self, wallhaven_service, wallpaper, tmp_path, mocker
+    ):
+        dest = tmp_path / "wallpapers" / "abc123.jpg"
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(
+            side_effect=[
+                self._download_response(429),
+                self._download_response(),
+            ]
+        )
+        with patch.object(wallhaven_service, "_get_session", return_value=mock_session):
+            with patch.object(wallhaven_service, "_rate_limit"):
+                recorded = patch_sleep_recorder(mocker)
+                result = await wallhaven_service.download(wallpaper, dest)
+
+        assert result is True
+        assert dest.read_bytes() == b"image-bytes"
+        assert recorded == [1.0]
+
+    async def test_download_429_exhausted_retries_raise(
+        self, wallhaven_service, wallpaper, tmp_path, mocker
+    ):
+        dest = tmp_path / "wallpapers" / "abc123.jpg"
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(side_effect=lambda *a, **kw: self._download_response(429))
+        with patch.object(wallhaven_service, "_get_session", return_value=mock_session):
+            with patch.object(wallhaven_service, "_rate_limit"):
+                recorded = patch_sleep_recorder(mocker)
+                with pytest.raises(ServiceError, match="[Rr]ate [Ll]imit"):
+                    await wallhaven_service.download(wallpaper, dest)
+
+        assert mock_session.get.call_count == 4
+        assert not dest.exists()
+        assert not list(tmp_path.rglob("*.part*"))
+        assert recorded == [1.0, 2.0, 4.0]
+
+
+class TestUniquePartFiles:
+    """New-6: concurrent downloads of the same target must not share one
+    .part file (interleaved writes would corrupt each other)."""
+
+    @pytest.fixture
+    def wallpaper(self):
+        return Wallpaper(
+            id="abc123",
+            url="https://wallhaven.cc/w/abc123",
+            path="https://w.wallhaven.cc/full/abc123.jpg",
+            resolution=Resolution(1920, 1080),
+            source=WallpaperSource.WALLHAVEN,
+            category="general",
+            purity=WallpaperPurity.SFW,
+        )
+
+    @pytest.fixture
+    def wallhaven_service(self):
+        return WallhavenService()
+
+    @staticmethod
+    def _download_response(body):
+        resp = MagicMock()
+        resp.status = 200
+        resp.headers = {"content-length": str(len(body))}
+        resp.raise_for_status = MagicMock()
+
+        async def iter_chunked(n):
+            for i in range(0, len(body), n):
+                await asyncio.sleep(0)  # yield control so downloads overlap
+                yield body[i : i + n]
+
+        resp.content.iter_chunked = iter_chunked
+        return MockAsyncContextManager(resp)
+
+    async def test_overlapping_downloads_use_distinct_part_names(
+        self, wallhaven_service, wallpaper, tmp_path, mocker
+    ):
+        import asyncio as aio
+
+        dest = tmp_path / "wallpapers" / "abc123.jpg"
+        body_a = b"A" * 4096
+        body_b = b"B" * 4096
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(
+            side_effect=[
+                self._download_response(body_a),
+                self._download_response(body_b),
+            ]
+        )
+
+        part_names = []
+        real_replace = os.replace
+
+        def spy_replace(src, dst):
+            part_names.append(Path(src).name)
+            real_replace(src, dst)
+
+        mocker.patch("services.wallhaven_service.os.replace", side_effect=spy_replace)
+
+        with patch.object(wallhaven_service, "_get_session", return_value=mock_session):
+            mocker.patch.object(wallhaven_service, "_rate_limit", new=AsyncMock())
+            results = await aio.gather(
+                wallhaven_service.download(wallpaper, dest),
+                wallhaven_service.download(wallpaper, dest),
+            )
+
+        assert results == [True, True]
+        # Both downloads completed; each wrote its own uniquely-named .part.
+        assert len(part_names) == 2
+        assert len(set(part_names)) == 2, "part file names must be unique"
+        for name in part_names:
+            assert name.startswith(dest.name)
+            assert name.endswith(".part")
+            assert name != dest.name + ".part", "must not use the shared static name"
+        # Final file is valid (complete content of one of the downloads).
+        final = dest.read_bytes()
+        assert final in (body_a, body_b)
+
+    async def test_download_uses_explicit_timeout(
+        self, wallhaven_service, wallpaper, tmp_path, mocker
+    ):
+        """L6: the download request must carry a per-request timeout (total=120)."""
+        dest = tmp_path / "wallpapers" / "abc123.jpg"
+        mock_session = AsyncMock()
+        mock_session.get = MagicMock(return_value=self._download_response(b"image-bytes"))
+
+        with patch.object(wallhaven_service, "_get_session", return_value=mock_session):
+            mocker.patch.object(wallhaven_service, "_rate_limit", new=AsyncMock())
+            result = await wallhaven_service.download(wallpaper, dest)
+
+        assert result is True
+        timeout = mock_session.get.call_args[1]["timeout"]
+        assert isinstance(timeout, aiohttp.ClientTimeout)
+        assert timeout.total == 120
+
+    async def test_failed_download_leaves_no_part_files(
+        self, wallhaven_service, wallpaper, tmp_path, mocker
+    ):
+        """The unique-name change must not break partial-file cleanup."""
+
+        dest = tmp_path / "wallpapers" / "abc123.jpg"
+        mock_session = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.headers = {"content-length": "100"}
+        mock_response.raise_for_status = MagicMock()
+
+        async def iter_chunked_then_fail(n):
+            yield b"partial"
+            raise aiohttp.ClientPayloadError("Connection dropped")
+
+        mock_response.content.iter_chunked = iter_chunked_then_fail
+        mock_session.get = MagicMock(return_value=MockAsyncContextManager(mock_response))
+
+        with patch.object(wallhaven_service, "_get_session", return_value=mock_session):
+            mocker.patch.object(wallhaven_service, "_rate_limit", new=AsyncMock())
+            result = await wallhaven_service.download(wallpaper, dest)
+
+        assert result is False
+        assert not dest.exists()
+        assert list(tmp_path.rglob("*.part*")) == []
 
 
 class TestClose:

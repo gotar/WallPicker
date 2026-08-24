@@ -610,3 +610,32 @@ class TestGetOrDownloadSessionVariant:
 
         assert result == _Path("/tmp/x.jpg")
         download_mock.assert_awaited_once()
+
+
+class TestInvalidate:
+    """M4: corrupt-but-present cache entries must be removable."""
+
+    def test_invalidate_deletes_cache_entry(self, tmp_path: Path):
+        cache = ThumbnailCache(cache_dir=tmp_path)
+        url = "http://example.com/corrupt.jpg"
+        entry = cache._get_cache_path(url)
+        entry.write_bytes(b"corrupt-bytes")
+
+        cache.invalidate(url)
+
+        assert not entry.exists()
+
+    def test_invalidate_unknown_url_is_noop(self, tmp_path: Path):
+        cache = ThumbnailCache(cache_dir=tmp_path)
+
+        cache.invalidate("http://example.com/never-cached.jpg")  # Must not raise
+
+    def test_invalidate_tolerates_vanished_file(self, tmp_path: Path, mocker: MockerFixture):
+        cache = ThumbnailCache(cache_dir=tmp_path)
+        url = "http://example.com/vanishing.jpg"
+        entry = cache._get_cache_path(url)
+        entry.write_bytes(b"x")
+        # Simulate the file vanishing between lookup and unlink.
+        mocker.patch("pathlib.Path.unlink", side_effect=FileNotFoundError)
+
+        cache.invalidate(url)  # Must not raise

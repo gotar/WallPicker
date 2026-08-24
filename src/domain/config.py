@@ -22,18 +22,16 @@ class Config:
     last_set_wallpaper_path: str | None = None
 
     def validate(self) -> None:
-        """Validate configuration state."""
-        if self.local_wallpapers_dir:
-            if not isinstance(self.local_wallpapers_dir, Path):
-                raise ConfigError("local_wallpapers_dir must be a Path object")
-            if not self.local_wallpapers_dir.exists():
-                raise ConfigError(
-                    f"Directory does not exist: {self.local_wallpapers_dir}"
-                )
-            if not self.local_wallpapers_dir.is_dir():
-                raise ConfigError(
-                    f"Path is not a directory: {self.local_wallpapers_dir}"
-                )
+        """Validate configuration state.
+
+        Only type checks live here (L16): existence/is_dir checks belong to
+        ConfigService, which warns and recreates a vanished wallpapers dir
+        instead of blocking every save.
+        """
+        if self.local_wallpapers_dir is not None and not isinstance(
+            self.local_wallpapers_dir, Path
+        ):
+            raise ConfigError("local_wallpapers_dir must be a Path object")
 
     @property
     def pictures_dir(self) -> Path:

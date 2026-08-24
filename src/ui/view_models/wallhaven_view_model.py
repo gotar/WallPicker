@@ -182,6 +182,30 @@ class WallhavenViewModel(BaseViewModel):
     def seed(self, value: str) -> None:
         self._seed = value
 
+    async def apply_current_filters_and_search(
+        self, page: int = 1, append_results: bool = False
+    ) -> None:
+        """Run a search using the ViewModel's current filter properties.
+
+        Views should call this (instead of search_wallpapers() with no args)
+        so user query/category/purity/sort/advanced filters are honored.
+        """
+        await self.search_wallpapers(
+            query=self.search_query,
+            page=page,
+            category=self.category,
+            purity=self.purity,
+            sorting=self.sorting,
+            order=self.order,
+            resolution=self.resolution,
+            top_range=self.top_range,
+            ratios=self.ratios,
+            colors=self.colors,
+            resolutions=self.resolutions,
+            seed=self.seed,
+            append_results=append_results,
+        )
+
     async def load_initial_wallpapers(self) -> None:
         """Load initial wallpapers with current parameters"""
         logger.info("Loading initial Wallhaven wallpapers")
@@ -227,7 +251,7 @@ class WallhavenViewModel(BaseViewModel):
 
         async with self._search_lock:
             try:
-                self._set_property_idle("is_busy", True)
+                self._push_busy()
                 self._set_property_idle("error_message", None)
 
                 # Persist the applied search parameters (thread-safe writes)
@@ -286,10 +310,11 @@ class WallhavenViewModel(BaseViewModel):
             except (ClientError, ValueError, OSError, Exception) as e:
                 error_msg = f"Failed to search wallpapers: {e}"
                 self._set_property_idle("error_message", error_msg)
-                self._set_property_idle("wallpapers", [])
+                # Keep existing wallpapers on transient failures instead of
+                # wiping the grid the user is looking at.
                 logger.error(error_msg, exc_info=True)
             finally:
-                self._set_property_idle("is_busy", False)
+                self._pop_busy()
 
     def _set_search_results_idle(
         self,
@@ -371,7 +396,7 @@ class WallhavenViewModel(BaseViewModel):
 
     async def set_wallpaper(self, wallpaper: Wallpaper) -> tuple[bool, str]:
         try:
-            self._set_property_idle("is_busy", True)
+            self._push_busy()
             self._set_property_idle("error_message", None)
 
             local_path = await self.download_wallpaper(wallpaper)
@@ -386,7 +411,7 @@ class WallhavenViewModel(BaseViewModel):
             self._set_property_idle("error_message", str(e))
             return False, str(e)
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def add_to_favorites_async(self, wallpaper: Wallpaper) -> tuple[bool, str]:
         """Add wallpaper to favorites. Returns (success, message) tuple."""
@@ -396,7 +421,7 @@ class WallhavenViewModel(BaseViewModel):
 
         async with self._add_to_favorites_lock:
             try:
-                self._set_property_idle("is_busy", True)
+                self._push_busy()
                 self._set_property_idle("error_message", None)
 
                 if await asyncio.to_thread(
@@ -413,12 +438,12 @@ class WallhavenViewModel(BaseViewModel):
                 )
                 return False, f"Failed to add to favorites: {e}"
             finally:
-                self._set_property_idle("is_busy", False)
+                self._pop_busy()
 
     async def set_wallpaper_async(self, wallpaper: Wallpaper) -> tuple[bool, str]:
         """Set wallpaper as desktop background. Returns (success, message) tuple."""
         try:
-            self._set_property_idle("is_busy", True)
+            self._push_busy()
             self._set_property_idle("error_message", None)
 
             local_path = await self.download_wallpaper(wallpaper)
@@ -437,14 +462,14 @@ class WallhavenViewModel(BaseViewModel):
             )
             return False, f"Failed to set wallpaper: {e}"
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def download_wallpaper_async(
         self, wallpaper: Wallpaper
     ) -> tuple[str | None, str]:
         """Download wallpaper and return (path, message) tuple."""
         try:
-            self._set_property_idle("is_busy", True)
+            self._push_busy()
             self._set_property_idle("error_message", None)
 
             path = await self.download_wallpaper(wallpaper)
@@ -459,7 +484,7 @@ class WallhavenViewModel(BaseViewModel):
             self._set_property_idle("error_message", f"Download error: {e}")
             return None, f"Download error: {e}"
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def download_wallpaper(self, wallpaper: Wallpaper) -> str | None:
         """Download wallpaper and return the local path, or None on failure."""
@@ -469,7 +494,7 @@ class WallhavenViewModel(BaseViewModel):
             return None
 
         try:
-            self._set_property_idle("is_busy", True)
+            self._push_busy()
 
             filename = f"{wallpaper.id}.{wallpaper.path.rsplit('.', 1)[-1]}"
             dest_path = config.local_wallpapers_dir / filename
@@ -498,4 +523,4 @@ class WallhavenViewModel(BaseViewModel):
             self._set_property_idle("error_message", f"Download error: {e}")
             return None
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()

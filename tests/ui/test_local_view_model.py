@@ -560,3 +560,35 @@ class TestUpscaleTagQueues:
 
         assert received == [(True, str(tmp_path / "y.jpg"))]
         assert idle_add.called
+
+
+class TestStaleResultDiscard:
+    """Test generation-counter staleness guards (M14)."""
+
+    @pytest.mark.asyncio
+    async def test_search_discards_stale_result(self, local_view_model, tmp_path, mocker):
+        """A search finishing after a newer request started is discarded."""
+        sentinel = [
+            LocalWallpaper(
+                path=tmp_path / "keep.jpg",
+                filename="keep.jpg",
+                size=1,
+                modified_time=1.0,
+                tags=[],
+            )
+        ]
+        local_view_model._wallpapers = sentinel
+
+        async def slow_search(query, wallpapers):
+            # Simulate a newer request starting while this one is in flight
+            local_view_model._load_generation += 1
+            return []
+
+        local_view_model.local_service.search_wallpapers_async = mocker.AsyncMock(
+            side_effect=slow_search
+        )
+
+        await local_view_model.search_wallpapers("stale")
+
+        # Stale completion must not overwrite current state
+        assert local_view_model.wallpapers is sentinel

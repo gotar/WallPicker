@@ -48,20 +48,20 @@ class TagGenerationService(BaseService):
         """Check if clip-anytorch Python module is available."""
         if self._clip_anytorch_available is not None:
             return self._clip_anytorch_available
-        try:
-            import clip  # noqa: F401
-            import torch  # noqa: F401
-
-            self._clip_anytorch_available = True
-        except ImportError:
-            self._clip_anytorch_available = False
-        return self._clip_anytorch_available
+        # Single probe chain: prefer the clip_anytorch package, fall back to
+        # a plain `clip` + torch install (both expose the same API).
         try:
             import clip_anytorch  # noqa: F401
 
             self._clip_anytorch_available = True
         except ImportError:
-            self._clip_anytorch_available = False
+            try:
+                import clip  # noqa: F401
+                import torch  # noqa: F401
+
+                self._clip_anytorch_available = True
+            except ImportError:
+                self._clip_anytorch_available = False
         return self._clip_anytorch_available
 
     def _check_clip_cpp(self) -> bool:
@@ -110,7 +110,11 @@ class TagGenerationService(BaseService):
             Tuple of (tags list, confidence dict)
         """
         try:
-            import clip
+            try:
+                import clip
+            except ImportError:
+                # Same API as clip; used when only clip-anytorch is installed.
+                import clip_anytorch as clip  # type: ignore[no-redef]
             import torch
             from PIL import Image
 

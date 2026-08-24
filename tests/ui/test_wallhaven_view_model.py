@@ -67,7 +67,44 @@ class TestWallhavenViewModelSearchWallpapers:
 
         assert wallhaven_view_model.error_message is not None
         assert "Failed to search wallpapers" in wallhaven_view_model.error_message
+        # M15: a transient failure must keep existing results, not wipe them.
+        # The grid starts empty here, so it stays empty.
         assert wallhaven_view_model.wallpapers == []
+
+    @pytest.mark.asyncio
+    async def test_search_error_preserves_existing_wallpapers(
+        self, wallhaven_view_model, mock_wallhaven_service
+    ):
+        """A failed search keeps previously loaded wallpapers (M15)."""
+        await wallhaven_view_model.search_wallpapers(query="nature")
+        assert len(wallhaven_view_model.wallpapers) == 3
+
+        mock_wallhaven_service.search.side_effect = Exception("API Error")
+        await wallhaven_view_model.search_wallpapers(query="other")
+
+        assert wallhaven_view_model.error_message is not None
+        assert len(wallhaven_view_model.wallpapers) == 3
+
+    @pytest.mark.asyncio
+    async def test_apply_current_filters_and_search_uses_own_properties(
+        self, wallhaven_view_model, mock_wallhaven_service
+    ):
+        """apply_current_filters_and_search reads the VM's own filters (H4)."""
+        wallhaven_view_model.search_query = "nature"
+        wallhaven_view_model.category = "100"
+        wallhaven_view_model.purity = "110"
+        wallhaven_view_model.sorting = "views"
+        wallhaven_view_model.ratios = "16x9"
+
+        await wallhaven_view_model.apply_current_filters_and_search()
+
+        mock_wallhaven_service.search.assert_called_once()
+        _, kwargs = mock_wallhaven_service.search.call_args
+        assert kwargs["query"] == "nature"
+        assert kwargs["categories"] == "100"
+        assert kwargs["purity"] == "110"
+        assert kwargs["sorting"] == "views"
+        assert kwargs["ratios"] == "16x9"
 
 
 class TestWallhavenViewModelPagination:

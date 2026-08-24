@@ -37,16 +37,20 @@ class FavoritesViewModel(BaseViewModel):
         wallpaper_setter: WallpaperSetter,
         config_service: ConfigService | None = None,
         wallhaven_service: WallhavenService | None = None,
+        toast_service=None,
     ) -> None:
         super().__init__()
         self.favorites_service = favorites_service
         self.wallpaper_setter = wallpaper_setter
         self.config_service = config_service
         self.wallhaven_service = wallhaven_service
+        self.toast_service = toast_service
 
         self._favorites: list[Favorite] = []
         self._search_query: str = ""
         self._set_wallpaper_lock = asyncio.Lock()
+        # Monotonic generation counter to discard stale load/search completions.
+        self._load_generation = 0
 
     @GObject.Property(type=object)
     def wallpapers(self) -> list[Wallpaper]:
@@ -83,10 +87,15 @@ class FavoritesViewModel(BaseViewModel):
 
     async def load_favorites(self) -> None:
         try:
-            self._set_property_idle("is_busy", True)
+            self._load_generation += 1
+            generation = self._load_generation
+            self._push_busy()
             self._set_property_idle("error_message", None)
 
             favorites = await asyncio.to_thread(self.favorites_service.get_favorites)
+            if generation != self._load_generation:
+                logger.debug("Discarding stale favorites load")
+                return
             GLib.idle_add(self._set_favorites, favorites)
             logger.info(f"Loading favorites, found {len(favorites)} items")
 
@@ -94,47 +103,55 @@ class FavoritesViewModel(BaseViewModel):
             self._set_property_idle(
                 "error_message", f"Failed to load favorites: {e}"
             )
-            GLib.idle_add(self._set_favorites, [])
+            if generation == self._load_generation:
+                GLib.idle_add(self._set_favorites, [])
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def search_favorites(self, query: str = "") -> None:
         try:
-            self._set_property_idle("is_busy", True)
+            generation = self._load_generation
+            self._push_busy()
             self._set_property_idle("error_message", None)
             self._search_query = query
-
             if not query or query.strip() == "":
                 await self.load_favorites()
-            else:
-                results = await asyncio.to_thread(
-                    self.favorites_service.search_favorites, query
-                )
+                return
 
-                if results and isinstance(results[0], Favorite):
-                    matched_favorites = results
-                else:
-                    all_favorites = await asyncio.to_thread(
-                        self.favorites_service.get_favorites
-                    )
-                    favorites_by_id = {
-                        favorite.wallpaper_id: favorite for favorite in all_favorites
-                    }
-                    matched_favorites = [
-                        favorites_by_id[wallpaper.id]
-                        for wallpaper in results
-                        if wallpaper.id in favorites_by_id
-                    ]
+            self._load_generation += 1
+            generation = self._load_generation
 
-                GLib.idle_add(self._set_favorites, matched_favorites)
+            results = await asyncio.to_thread(
+                self.favorites_service.search_favorites, query
+            )
+
+            # search_favorites always returns list[Wallpaper] now; map back
+            # to the Favorite records for the view.
+            all_favorites = await asyncio.to_thread(
+                self.favorites_service.get_favorites
+            )
+            favorites_by_id = {
+                favorite.wallpaper_id: favorite for favorite in all_favorites
+            }
+            matched_favorites = [
+                favorites_by_id[wallpaper.id]
+                for wallpaper in results
+                if wallpaper.id in favorites_by_id
+            ]
+
+            if generation != self._load_generation:
+                logger.debug("Discarding stale favorites search result")
+                return
+            GLib.idle_add(self._set_favorites, matched_favorites)
 
         except Exception as e:
             self._set_property_idle(
                 "error_message", f"Failed to search favorites: {e}"
             )
-            GLib.idle_add(self._set_favorites, [])
+            if generation == self._load_generation:
+                GLib.idle_add(self._set_favorites, [])
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     def add_favorite_sync(
         self,
@@ -170,7 +187,7 @@ class FavoritesViewModel(BaseViewModel):
         tags: str,
     ) -> bool:
         try:
-            self._set_property_idle("is_busy", True)
+            self._push_busy()
             self._set_property_idle("error_message", None)
 
             try:
@@ -199,11 +216,11 @@ class FavoritesViewModel(BaseViewModel):
             self._show_toast(f"Failed to add favorite: {e}", "error")
             return False
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def remove_favorite(self, wallpaper_id: str | Favorite) -> bool:
         try:
-            self._set_property_idle("is_busy", True)
+            self._push_busy()
             self._set_property_idle("error_message", None)
 
             target_wallpaper_id = (
@@ -227,11 +244,11 @@ class FavoritesViewModel(BaseViewModel):
             self._show_toast(f"Failed to remove favorite: {e}", "error")
             return False
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def set_wallpaper(self, favorite: Favorite) -> tuple[bool, str]:
         try:
-            self._set_property_idle("is_busy", True)
+            self._push_busy()
             self._set_property_idle("error_message", None)
 
             result = await self.wallpaper_setter.set_wallpaper_async(
@@ -250,7 +267,7 @@ class FavoritesViewModel(BaseViewModel):
             self._show_toast(f"Failed to set wallpaper: {e}", "error")
             return False, f"Failed to set wallpaper: {e}"
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def set_wallpaper_async(self, favorite: Favorite) -> tuple[bool, str]:
         if not self.wallpaper_setter:
@@ -258,7 +275,7 @@ class FavoritesViewModel(BaseViewModel):
 
         async with self._set_wallpaper_lock:
             try:
-                self._set_property_idle("is_busy", True)
+                self._push_busy()
                 self._set_property_idle("error_message", None)
 
                 wallpaper = favorite.wallpaper
@@ -308,7 +325,7 @@ class FavoritesViewModel(BaseViewModel):
                 logger.error(f"Failed to set wallpaper: {e}", exc_info=True)
                 return False, f"Failed to set wallpaper: {e}"
             finally:
-                self._set_property_idle("is_busy", False)
+                self._pop_busy()
 
     def is_favorite(self, wallpaper_id: str) -> bool:
         result = self.favorites_service.is_favorite(wallpaper_id)
@@ -324,7 +341,12 @@ class FavoritesViewModel(BaseViewModel):
         raise ValueError(f"Wallpaper {wallpaper_id} not in favorites list")
 
     def refresh_favorites(self) -> None:
-        self.search_query = ""
+        """Reload favorites from disk, clearing any active search.
+
+        Schedules exactly one load - assigning ``search_query`` would trigger
+        a second concurrent load through its property setter.
+        """
+        self._search_query = ""
         schedule_async(self.load_favorites())
 
     def select_all(self) -> None:
@@ -333,19 +355,18 @@ class FavoritesViewModel(BaseViewModel):
         self._update_selection_state()
 
     def _show_toast(self, message: str, msg_type: str = "info"):
+        """Show a toast via the injected ToastService (main thread safe)."""
+        if not self.toast_service:
+            logger.debug(f"No toast service available; dropping toast: {message}")
+            return
         try:
-            window = self.get_root()
-            if window and hasattr(window, "toast_service"):
-                if msg_type == "success":
-                    window.toast_service.show_success(message)
-                elif msg_type == "error":
-                    window.toast_service.show_error(message)
-                elif msg_type == "warning":
-                    window.toast_service.show_warning(message)
-                else:
-                    window.toast_service.show_info(message)
+            if msg_type == "success":
+                self.toast_service.show_success(message)
+            elif msg_type == "error":
+                self.toast_service.show_error(message)
+            elif msg_type == "warning":
+                self.toast_service.show_warning(message)
+            else:
+                self.toast_service.show_info(message)
         except (AttributeError, RuntimeError) as e:
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.debug(f"Could not show toast notification: {e}")

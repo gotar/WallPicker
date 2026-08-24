@@ -125,6 +125,8 @@ class FavoritesView(Adw.Bin):
 
         # Track card->wallpaper mapping for keyboard activation
         self.card_wallpaper_map = {}
+        # Track card->favorite mapping so removal uses favorite identity (M18)
+        self.card_favorite_map = {}
 
     def _on_key_pressed(self, controller, keyval, keycode, state):
         """Handle keyboard shortcuts at view level."""
@@ -172,11 +174,11 @@ class FavoritesView(Adw.Bin):
             return True
         elif keyval == Gdk.KEY_space:
             focused = self.wallpapers_grid.get_focus_child()
-            if focused and focused in self.card_wallpaper_map:
-                wallpaper = self.card_wallpaper_map[focused]
+            if focused and focused in self.card_favorite_map:
+                favorite = self.card_favorite_map[focused]
 
-                async def remove_favorite():
-                    await self.view_model.remove_favorite(wallpaper.id)
+                async def remove_favorite(fav=favorite):
+                    await self.view_model.remove_favorite(fav)
 
                 self._run_async(remove_favorite())
             return True
@@ -310,6 +312,7 @@ class FavoritesView(Adw.Bin):
                 self.wallpapers_grid.remove(self.wallpapers_grid.get_first_child())
 
             self.card_wallpaper_map.clear()
+            self.card_favorite_map.clear()
 
             for favorite in self.view_model.favorites:
                 card = self._create_wallpaper_card(favorite)
@@ -336,6 +339,7 @@ class FavoritesView(Adw.Bin):
 
         # Store mapping for keyboard activation
         self.card_wallpaper_map[card] = favorite.wallpaper
+        self.card_favorite_map[card] = favorite
 
         wallpaper = favorite.wallpaper
         is_selected = wallpaper in self.view_model.get_selected_wallpapers()

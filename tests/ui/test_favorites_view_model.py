@@ -151,3 +151,37 @@ class TestFavoritesViewModelRefresh:
 
         assert favorites_view_model.search_query == ""
         assert len(favorites_view_model._scheduled_coroutines_for_test) >= 2
+
+
+class TestRefreshFavoritesSingleLoad:
+    """refresh_favorites must schedule exactly one reload (M14)."""
+
+    def test_refresh_favorites_schedules_single_load(self, favorites_view_model):
+        # Bypass the property setter - assigning search_query schedules its own
+        # search; refresh must not add a second concurrent load on top.
+        favorites_view_model._search_query = "anime"
+        favorites_view_model.refresh_favorites()
+
+        scheduled = favorites_view_model._scheduled_coroutines_for_test
+        assert len(scheduled) == 1
+        assert favorites_view_model.search_query == ""
+
+
+class TestToastServiceInjection:
+    """_show_toast uses the injected toast service (M16)."""
+
+    def test_show_toast_routes_to_service(self, favorites_view_model):
+        shown = []
+
+        class FakeToastService:
+            def show_success(self, message):
+                shown.append(("success", message))
+
+        favorites_view_model.toast_service = FakeToastService()
+        favorites_view_model._show_toast("Added", "success")
+
+        assert shown == [("success", "Added")]
+
+    def test_show_toast_without_service_does_not_crash(self, favorites_view_model):
+        favorites_view_model.toast_service = None
+        favorites_view_model._show_toast("Ignored", "info")

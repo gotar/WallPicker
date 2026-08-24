@@ -205,6 +205,15 @@ class ThumbnailLoader:
         """Clear the in-memory thumbnail cache."""
         self._local_thumbnail_cache.clear()
 
+    def invalidate(self, path_or_url: str) -> None:
+        """Drop the cached thumbnail for one path.
+
+        Used when a file changes on disk underneath the same path (e.g. AI
+        upscaling), so a reload picks up the new content instead of the
+        stale in-memory bytes.
+        """
+        self._local_thumbnail_cache.pop(path_or_url, None)
+
     def __del__(self) -> None:
         """Cleanup on destruction."""
         if hasattr(self, "_executor"):

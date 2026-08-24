@@ -239,3 +239,50 @@ class TestThreadSafeHelpers:
         vm._emit_idle("multi", True, "msg", "/path")
 
         assert received == [True, "msg", "/path"]
+
+
+class TestBusyDepth:
+    """Test busy depth counter (M17)."""
+
+    def test_push_busy_sets_is_busy_once(self, mocker: MockerFixture):
+        """First _push_busy marks the VM busy; nested pushes keep it busy."""
+        mocker.patch(
+            "ui.view_models.base.GLib.idle_add",
+            side_effect=lambda func, *args: func(*args),
+        )
+        vm = MockBaseViewModel()
+
+        vm._push_busy()
+        assert vm.is_busy is True
+
+        vm._push_busy()
+        assert vm.is_busy is True
+
+    def test_pop_busy_clears_only_at_depth_zero(self, mocker: MockerFixture):
+        """Nested operations must not clear the spinner early (M17)."""
+        mocker.patch(
+            "ui.view_models.base.GLib.idle_add",
+            side_effect=lambda func, *args: func(*args),
+        )
+        vm = MockBaseViewModel()
+
+        vm._push_busy()
+        vm._push_busy()
+
+        vm._pop_busy()
+        assert vm.is_busy is True
+
+        vm._pop_busy()
+        assert vm.is_busy is False
+
+    def test_pop_busy_never_goes_negative(self, mocker: MockerFixture):
+        """Unbalanced _pop_busy must not corrupt the counter."""
+        mocker.patch(
+            "ui.view_models.base.GLib.idle_add",
+            side_effect=lambda func, *args: func(*args),
+        )
+        vm = MockBaseViewModel()
+
+        vm._pop_busy()
+        assert vm._busy_depth == 0
+        assert vm.is_busy is False

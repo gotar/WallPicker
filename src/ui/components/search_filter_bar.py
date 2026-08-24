@@ -376,7 +376,7 @@ class SearchFilterBar(Gtk.Box):
         selected = dropdown.get_selected()
         if selected != Gtk.INVALID_LIST_POSITION and selected in self._sort_mapping:
             sort_value = self._sort_mapping[selected]
-            self._add_filter_chip("Sort", self._get_sort_display_name(sort_value))
+            self._add_filter_chip("sort", self._get_sort_display_name(sort_value))
             self._active_filters["sort"] = sort_value
 
             if self._on_sort_changed_callback:
@@ -410,7 +410,7 @@ class SearchFilterBar(Gtk.Box):
                 name = "All"
 
             self._active_filters["category"] = code
-            self._add_filter_chip("Category", name)
+            self._add_filter_chip("category", name)
 
             if self._on_filter_changed_callback:
                 self._on_filter_changed_callback(self._active_filters)
@@ -456,7 +456,7 @@ class SearchFilterBar(Gtk.Box):
             name = "Custom"
 
         self._active_filters["purity"] = purity_bits
-        self._add_filter_chip("Purity", name)
+        self._add_filter_chip("purity", name)
 
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
@@ -476,7 +476,7 @@ class SearchFilterBar(Gtk.Box):
                 value = resolutions[selected]
                 name = dropdown.get_model().get_string(selected)
                 self._active_filters["resolution"] = value
-                self._add_filter_chip("Resolution", name)
+                self._add_filter_chip("resolution", name)
 
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
@@ -495,7 +495,7 @@ class SearchFilterBar(Gtk.Box):
                 value = top_ranges[selected]
                 name = dropdown.get_model().get_string(selected)
                 self._active_filters["top_range"] = value
-                self._add_filter_chip("Top Range", name)
+                self._add_filter_chip("top_range", name)
 
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
@@ -515,7 +515,7 @@ class SearchFilterBar(Gtk.Box):
                 value = ratios[selected]
                 name = dropdown.get_model().get_string(selected)
                 self._active_filters["ratios"] = value
-                self._add_filter_chip("Aspect Ratio", name)
+                self._add_filter_chip("ratios", name)
 
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
@@ -549,7 +549,7 @@ class SearchFilterBar(Gtk.Box):
                 value = colors[selected]
                 name = dropdown.get_model().get_string(selected)
                 self._active_filters["colors"] = value
-                self._add_filter_chip("Color", name)
+                self._add_filter_chip("colors", name)
 
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
@@ -570,7 +570,7 @@ class SearchFilterBar(Gtk.Box):
                 value = resolutions[selected]
                 name = dropdown.get_model().get_string(selected)
                 self._active_filters["resolution"] = value
-                self._add_filter_chip("Resolution", name)
+                self._add_filter_chip("resolution", name)
 
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
@@ -591,22 +591,22 @@ class SearchFilterBar(Gtk.Box):
                 value = ratios[selected]
                 name = dropdown.get_model().get_string(selected)
                 self._active_filters["ratios"] = value
-                self._add_filter_chip("Aspect Ratio", name)
+                self._add_filter_chip("ratios", name)
 
         if self._on_filter_changed_callback:
             self._on_filter_changed_callback(self._active_filters)
 
         self.filter_popover.popdown()
 
-    def _add_filter_chip(self, filter_type: str, value: str):
+    def _add_filter_chip(self, filter_key: str, display_value: str):
         """Add a filter chip to the chips container.
 
         Args:
-            filter_type: Type of filter (e.g., "Sort", "Category")
-            value: Filter value to display
+            filter_key: Backend filter key (matches _active_filters keys)
+            display_value: Filter value to display
         """
         # Remove existing chip of same type
-        self._remove_filter_chip_by_type(filter_type)
+        self._remove_filter_chip_by_type(filter_key)
 
         # Show chips container if not visible
         if not self._chips_container.get_visible():
@@ -616,8 +616,9 @@ class SearchFilterBar(Gtk.Box):
         chip = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         chip.add_css_class("filter-chip")
 
-        # Chip label
-        label = Gtk.Label(label=f"{filter_type}: {value}")
+        # Chip label (human-readable filter name + value)
+        label_text = self.FILTER_LABELS.get(filter_key, filter_key)
+        label = Gtk.Label(label=f"{label_text}: {display_value}")
         chip.append(label)
 
         # Remove button
@@ -626,14 +627,14 @@ class SearchFilterBar(Gtk.Box):
         remove_btn.add_css_class("flat")
         remove_btn.set_size_request(24, 24)
 
-        # Store filter type on button for removal
-        remove_btn._filter_type = filter_type
+        # Store backend filter key on button for removal (M10)
+        remove_btn._filter_type = filter_key
 
         remove_btn.connect("clicked", self._on_chip_remove_clicked)
         chip.append(remove_btn)
 
         # Store chip reference
-        chip._filter_type = filter_type
+        chip._filter_type = filter_key
 
         self._chips_container.append(chip)
         chip.add_css_class("chip-appeared")
@@ -659,36 +660,34 @@ class SearchFilterBar(Gtk.Box):
 
     def _on_chip_remove_clicked(self, button: Gtk.Button):
         """Handle chip remove button click."""
-        filter_type = getattr(button, "_filter_type", None)
-        if filter_type:
-            self._remove_filter_chip_by_type(filter_type)
+        filter_key = getattr(button, "_filter_type", None)
+        if filter_key:
+            self._remove_filter_chip_by_type(filter_key)
 
-            # Reset filter state
-            if filter_type in self._active_filters:
-                del self._active_filters[filter_type]
+            # Reset filter state (backend key matches _active_filters)
+            if filter_key in self._active_filters:
+                del self._active_filters[filter_key]
 
             # Reset UI controls
-            if filter_type == "Sort":
+            if filter_key == "sort":
                 self.sort_dropdown.set_selected(Gtk.INVALID_LIST_POSITION)
-            elif filter_type == "Category" and self.tab_type == "wallhaven":
+            elif filter_key == "category" and self.tab_type == "wallhaven":
                 # Reset to General (default)
                 self.category_sfw.set_active(True)
                 self.category_anime.set_active(False)
                 self.category_people.set_active(False)
-            elif filter_type == "Purity" and self.tab_type == "wallhaven":
+            elif filter_key == "purity" and self.tab_type == "wallhaven":
                 # Reset to SFW only (default)
                 self.purity_sfw.set_active(True)
                 self.purity_sketchy.set_active(False)
                 self.purity_nsfw.set_active(False)
-            elif filter_type == "Resolution":
+            elif filter_key == "resolution":
                 self.resolution_dropdown.set_selected(0)
-            elif filter_type == "Top Range" and self.tab_type == "wallhaven":
+            elif filter_key == "top_range" and self.tab_type == "wallhaven":
                 self.top_range_combo.set_selected(0)
-            elif filter_type == "Aspect Ratio" and self.tab_type == "wallhaven":
+            elif filter_key == "ratios":
                 self.aspect_combo.set_selected(0)
-            elif filter_type == "Aspect Ratio" and self.tab_type == "local":
-                self.aspect_combo.set_selected(0)
-            elif filter_type == "Color" and self.tab_type == "wallhaven":
+            elif filter_key == "colors" and self.tab_type == "wallhaven":
                 self.color_combo.set_selected(0)
 
             # Notify filter changed

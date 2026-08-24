@@ -31,6 +31,8 @@ class BaseViewModel(GObject.Object):
         self._is_busy = False
         self._error_message: str | None = None
         self._selected_wallpapers_list = []
+        # Depth counter for concurrent operations sharing the is_busy spinner
+        self._busy_depth = 0
 
     def bind_property(
         self,
@@ -93,6 +95,23 @@ class BaseViewModel(GObject.Object):
     def _apply_notify_idle(self, prop_name: str) -> bool:
         self.notify(prop_name)
         return False
+
+    def _push_busy(self) -> None:
+        """Increment busy depth and mark the ViewModel busy (thread-safe).
+
+        Nested operations must not clear the spinner when an inner one
+        finishes first, so a bare True/False toggle is not enough.
+        """
+        self._busy_depth += 1
+        if self._busy_depth == 1:
+            self._set_property_idle("is_busy", True)
+
+    def _pop_busy(self) -> None:
+        """Decrement busy depth; clear is_busy only at depth zero."""
+        if self._busy_depth > 0:
+            self._busy_depth -= 1
+        if self._busy_depth == 0:
+            self._set_property_idle("is_busy", False)
 
     def _emit_idle(self, signal_name: str, *args) -> None:
         """Emit a GObject signal on the GTK main thread (thread-safe).

@@ -209,12 +209,12 @@ class FavoritesService(BaseService):
             query: Search query string
 
         Returns:
-            List of matching Wallpaper domain models
+            List of matching Wallpaper domain models (empty query returns all)
         """
         favorites = self.get_favorites()
 
         if not query:
-            return favorites
+            return [favorite.wallpaper for favorite in favorites]
 
         # Build searchable strings from wallpaper data
         search_strings = [

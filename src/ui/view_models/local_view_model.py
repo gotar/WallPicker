@@ -76,6 +76,10 @@ class LocalViewModel(BaseViewModel):
         # (queue_upscale/queue_generate_tags) and the asyncio thread (_finish_*).
         self._queue_lock = threading.Lock()
 
+        # Monotonic generation counter: stale load/search/filter completions
+        # that finish after a newer request must not overwrite newer state.
+        self._load_generation = 0
+
     def _load_last_wallpaper_path(self) -> str | None:
         """Load last set wallpaper path from config."""
         if self.config_service:
@@ -143,15 +147,44 @@ class LocalViewModel(BaseViewModel):
 
     def find_wallpaper_by_hash(self, target_path: str) -> str | None:
         """Find local wallpaper matching the content hash of target file."""
+        target_size = self._get_file_size(target_path)
+        if target_size is None:
+            return None
+        candidates = [wp for wp in self._wallpapers if wp.size == target_size]
         target_hash = self._compute_file_hash(target_path)
         if not target_hash:
             return None
+        for wp in candidates:
+            if self._compute_file_hash(str(wp.path)) == target_hash:
+                return str(wp.path)
+        return None
 
-        for wp in self._wallpapers:
-            wp_hash = self._compute_file_hash(str(wp.path))
+    async def find_wallpaper_by_hash_async(self, target_path: str) -> str | None:
+        """Async variant of find_wallpaper_by_hash.
+
+        MD5 hashing runs off the UI thread with a file-size pre-filter so
+        large libraries are not fully hashed while blocking GTK (M20).
+        """
+        target_size = await asyncio.to_thread(self._get_file_size, target_path)
+        if target_size is None:
+            return None
+        candidates = [wp for wp in self._wallpapers if wp.size == target_size]
+        target_hash = await asyncio.to_thread(self._compute_file_hash, target_path)
+        if not target_hash:
+            return None
+        for wp in candidates:
+            wp_hash = await asyncio.to_thread(self._compute_file_hash, str(wp.path))
             if wp_hash == target_hash:
                 return str(wp.path)
         return None
+
+    @staticmethod
+    def _get_file_size(path: str | Path) -> int | None:
+        """Return file size in bytes, or None if it cannot be stat'ed."""
+        try:
+            return Path(path).stat().st_size
+        except OSError:
+            return None
 
     def _compute_file_hash(self, path: str) -> str | None:
         """Compute MD5 hash of file content."""
@@ -218,7 +251,9 @@ class LocalViewModel(BaseViewModel):
 
     async def load_wallpapers(self, recursive: bool = True) -> None:
         try:
-            self._set_property_idle("is_busy", True)
+            self._load_generation += 1
+            generation = self._load_generation
+            self._push_busy()
             self._set_property_idle("error_message", None)
 
             if self.pictures_dir:
@@ -227,18 +262,24 @@ class LocalViewModel(BaseViewModel):
             wallpapers = await self.local_service.get_wallpapers_async(
                 recursive=recursive
             )
+            if generation != self._load_generation:
+                logger.debug("Discarding stale local wallpapers load")
+                return
             self.search_query = ""
             GLib.idle_add(self._set_wallpapers, wallpapers)
 
         except Exception as e:
             self._set_property_idle("error_message", f"Failed to load wallpapers: {e}")
-            GLib.idle_add(self._set_wallpapers, [])
+            if generation == self._load_generation:
+                GLib.idle_add(self._set_wallpapers, [])
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def search_wallpapers(self, query: str = "") -> None:
         try:
-            self._set_property_idle("is_busy", True)
+            self._load_generation += 1
+            generation = self._load_generation
+            self._push_busy()
             self._set_property_idle("error_message", None)
             self.search_query = query
 
@@ -248,19 +289,23 @@ class LocalViewModel(BaseViewModel):
                 results = await self.local_service.search_wallpapers_async(
                     query, self.wallpapers
                 )
+                if generation != self._load_generation:
+                    logger.debug("Discarding stale local search result")
+                    return
                 GLib.idle_add(self._set_wallpapers, results)
 
         except Exception as e:
             self._set_property_idle(
                 "error_message", f"Failed to search wallpapers: {e}"
             )
-            GLib.idle_add(self._set_wallpapers, [])
+            if generation == self._load_generation:
+                GLib.idle_add(self._set_wallpapers, [])
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def set_wallpaper(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         try:
-            self._set_property_idle("is_busy", True)
+            self._push_busy()
             self._set_property_idle("error_message", None)
             result = await self.wallpaper_setter.set_wallpaper_async(
                 str(wallpaper.path)
@@ -276,11 +321,11 @@ class LocalViewModel(BaseViewModel):
             self._set_property_idle("error_message", str(e))
             return False, str(e)
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def delete_wallpaper(self, wallpaper: LocalWallpaper) -> tuple[bool, str]:
         try:
-            self._set_property_idle("is_busy", True)
+            self._push_busy()
             self._set_property_idle("error_message", None)
 
             result = await self.local_service.delete_wallpaper_async(wallpaper.path)
@@ -297,7 +342,7 @@ class LocalViewModel(BaseViewModel):
             )
             return False, str(e)
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     async def refresh_wallpapers(self) -> None:
         self.search_query = ""
@@ -334,7 +379,9 @@ class LocalViewModel(BaseViewModel):
 
     async def _apply_filters_async(self, filters: dict) -> None:
         try:
-            self._set_property_idle("is_busy", True)
+            self._load_generation += 1
+            generation = self._load_generation
+            self._push_busy()
 
             all_wallpapers = await self.local_service.get_wallpapers_async(
                 recursive=True
@@ -348,11 +395,14 @@ class LocalViewModel(BaseViewModel):
             filtered = self._apply_resolution_filter(all_wallpapers, filters)
             filtered = self._apply_aspect_filter(filtered, filters)
 
+            if generation != self._load_generation:
+                logger.debug("Discarding stale local filter result")
+                return
             GLib.idle_add(self._set_wallpapers, filtered)
         except Exception as e:
             self._set_property_idle("error_message", f"Failed to filter: {e}")
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     def _apply_resolution_filter(
         self, wallpapers: list[LocalWallpaper], filters: dict
@@ -440,7 +490,7 @@ class LocalViewModel(BaseViewModel):
             return False, "Favorites service not available"
 
         try:
-            self._set_property_idle("is_busy", True)
+            self._push_busy()
             self._set_property_idle("error_message", None)
 
             path_hash = hashlib.sha256(str(wallpaper.path).encode()).hexdigest()[:16]
@@ -475,7 +525,7 @@ class LocalViewModel(BaseViewModel):
             self._set_property_idle("error_message", f"Failed to add to favorites: {e}")
             return False, str(e)
         finally:
-            self._set_property_idle("is_busy", False)
+            self._pop_busy()
 
     def _get_image_size(self, path: Path) -> tuple[int, int]:
         width, height = 1920, 1080

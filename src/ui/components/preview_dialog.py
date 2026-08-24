@@ -348,19 +348,10 @@ class PreviewDialog(Adw.Dialog):
         async def load_image_async():
             image_path = image_source
             if self.thumbnail_cache and self.wallpaper.source.value == "wallhaven":
-                # Use thumbnail cache for remote images
-                cached = self.thumbnail_cache.get_thumbnail(image_source)
-                if cached:
-                    image_path = str(cached)
-                else:
-                    # For remote images, we need to use async operations
-                    import asyncio
-
-                    image_path = str(
-                        await self.thumbnail_cache.download_and_cache(
-                            image_source, None
-                        )
-                    )
+                # get_or_download_async handles cache lookup AND download with
+                # its own session - download_and_cache(url, None) would crash
+                # on a None session (H3).
+                image_path = str(await self.thumbnail_cache.get_or_download_async(image_source))
 
             # Decode the pixbuf off the main thread (GdkPixbuf is thread-safe
             # for loading); the Gdk.Texture is created later on the main thread.

@@ -1,5 +1,6 @@
 """View for local wallpaper browsing with pagination support."""
 
+import logging
 import sys
 from pathlib import Path
 
@@ -21,6 +22,8 @@ INITIAL_PAGE_SIZE = 50
 PAGE_SIZE = 50
 LOAD_MORE_THRESHOLD = 300
 MAX_VISIBLE_ITEMS = 1000
+
+logger = logging.getLogger(__name__)
 
 
 class LocalView(Adw.BreakpointBin):
@@ -52,6 +55,9 @@ class LocalView(Adw.BreakpointBin):
         self._tag_overlays = {}
         self._metadata_labels = {}
         self._tags_labels = {}
+        self._pictures = {}  # path -> Gtk.Picture, for single-card refresh (H2)
+        self._pending_upscale_paths = set()  # paths with in-flight upscale (M13)
+        self._pending_tag_paths = set()  # paths with in-flight tagging (M13)
         self._needs_full_rebuild = False
 
         # Pagination state
@@ -151,11 +157,17 @@ class LocalView(Adw.BreakpointBin):
         if card in self.card_wallpaper_map:
             wp = self.card_wallpaper_map.pop(card)
             self._wallpaper_card_map.pop(wp, None)
-            self._path_card_map.pop(str(wp.path), None)
+            path_str = str(wp.path)
+            self._path_card_map.pop(path_str, None)
+            self._metadata_labels.pop(path_str, None)
+            self._tags_labels.pop(path_str, None)
+            self._pictures.pop(path_str, None)
         for path, existing_card in list(self._path_card_map.items()):
             if existing_card == card:
                 self._path_card_map.pop(path, None)
                 self._metadata_labels.pop(path, None)
+                self._tags_labels.pop(path, None)
+                self._pictures.pop(path, None)
                 break
 
     def _create_ui(self):
@@ -450,24 +462,59 @@ class LocalView(Adw.BreakpointBin):
                 card = self._path_card_map.get(target_path)
 
         if not card:
-            # Try matching by content hash (handles awww cache copies)
-            matched_path = self.view_model.find_wallpaper_by_hash(current_path)
-            if matched_path:
-                target_path = matched_path
-                card = self._path_card_map.get(target_path)
-
-        if not card:
-            if not self._load_until_path_found(target_path):
-                # Try hash match after loading more
-                matched_path = self.view_model.find_wallpaper_by_hash(current_path)
-                if matched_path:
-                    target_path = matched_path
+            # Try matching by content hash (handles awww cache copies).
+            # Hashing is done off the UI thread (M20); the result is applied
+            # back on the main thread via idle_add.
+            self._begin_hash_scroll(current_path)
+            return
 
         card = self._path_card_map.get(target_path)
         if card:
             self._scroll_to_card(card)
         elif self.toast_service:
             self.toast_service.show_info("Current wallpaper not in list")
+
+    def _begin_hash_scroll(self, current_path: str, retried: bool = False) -> None:
+        """Match current wallpaper by content hash off the UI thread (M20)."""
+
+        async def match_by_hash():
+            return await self.view_model.find_wallpaper_by_hash_async(current_path)
+
+        def on_done(future):
+            GLib.idle_add(self._finish_hash_scroll, future, current_path, retried)
+
+        schedule_async(match_by_hash()).add_done_callback(on_done)
+
+    def _finish_hash_scroll(self, future, current_path: str, retried: bool) -> bool:
+        """Apply hash-match result on the main thread and scroll to the card."""
+        try:
+            matched_path = future.result()
+        except Exception as e:
+            logger.debug(f"Hash lookup failed for {current_path}: {e}")
+            matched_path = None
+
+        target_path = matched_path or current_path
+        card = self._path_card_map.get(target_path)
+        if card:
+            self._scroll_to_card(card)
+            return False
+
+        # Not visible yet: paginate through remaining items once, then retry.
+        if (
+            not retried
+            and self._has_more_items
+            and self._load_until_path_found(target_path)
+        ):
+            card = self._path_card_map.get(target_path)
+            if card:
+                self._scroll_to_card(card)
+            else:
+                self._begin_hash_scroll(current_path, retried=True)
+            return False
+
+        if self.toast_service:
+            self.toast_service.show_info("Current wallpaper not in list")
+        return False
 
     def _find_path_by_filename(self, filename: str) -> str | None:
         """Find a wallpaper path by matching filename."""
@@ -611,6 +658,8 @@ class LocalView(Adw.BreakpointBin):
         self._wallpaper_card_map.clear()
         self._path_card_map.clear()
         self._metadata_labels.clear()
+        self._tags_labels.clear()
+        self._pictures.clear()
         self._upscale_overlays.clear()
 
     def _rebuild_wallpaper_grid(self, wallpapers):
@@ -624,6 +673,8 @@ class LocalView(Adw.BreakpointBin):
         self._wallpaper_card_map.clear()
         self._path_card_map.clear()
         self._metadata_labels.clear()
+        self._tags_labels.clear()
+        self._pictures.clear()
         self._upscale_overlays.clear()
 
         for wallpaper in wallpapers:
@@ -676,6 +727,8 @@ class LocalView(Adw.BreakpointBin):
         thumb_path = str(wallpaper.path)
         if self.thumbnail_loader:
             self.thumbnail_loader.load_thumbnail_async(thumb_path, on_thumbnail_loaded)
+
+        self._pictures[thumb_path] = image
 
         card.append(image_overlay)
 
@@ -869,6 +922,7 @@ class LocalView(Adw.BreakpointBin):
     def _on_upscale_wallpaper(self, button, wallpaper):
         success, message = self.view_model.queue_upscale(wallpaper)
         if success:
+            self._pending_upscale_paths.add(str(wallpaper.path))
             card = self._wallpaper_card_map.get(wallpaper)
             if card:
                 self._show_upscale_overlay(card)
@@ -881,6 +935,7 @@ class LocalView(Adw.BreakpointBin):
     def _on_generate_tags(self, button, wallpaper):
         success, message = self.view_model.queue_generate_tags(wallpaper)
         if success:
+            self._pending_tag_paths.add(str(wallpaper.path))
             card = self._wallpaper_card_map.get(wallpaper)
             if card:
                 self._show_tag_overlay(card)
@@ -939,25 +994,20 @@ class LocalView(Adw.BreakpointBin):
     def _on_tagging_complete(
         self, view_model, success: bool, message: str, wallpaper_path: str
     ):
-        """Handle tagging completion."""
+        """Handle tagging completion for exactly the card that queued the work."""
+        self._pending_tag_paths.discard(wallpaper_path)
+        # Only touch the overlay of the matching card - never a first-match
+        # fallback that would leave the real card's spinner stuck (M13).
+        card = self._path_card_map.get(wallpaper_path)
         if success:
             if self.toast_service:
                 self.toast_service.show_success(message)
-            card = self._path_card_map.get(wallpaper_path)
             if card:
                 self._hide_tag_overlay(card)
                 self._refresh_wallpaper_card_by_path(wallpaper_path)
-            else:
-                for wp in self.view_model.wallpapers:
-                    if wp in self._wallpaper_card_map:
-                        card = self._wallpaper_card_map[wp]
-                        self._hide_tag_overlay(card)
-                        self._refresh_wallpaper_card(wp)
-                        break
         else:
             if self.toast_service:
                 self.toast_service.show_error(message)
-            card = self._path_card_map.get(wallpaper_path)
             if card:
                 self._hide_tag_overlay(card)
 
@@ -1021,33 +1071,22 @@ class LocalView(Adw.BreakpointBin):
     def _on_upscale_complete(
         self, view_model, success: bool, message: str, wallpaper_path: str
     ):
-        """Handle upscaling completion."""
+        """Handle upscaling completion for exactly the card that queued the work."""
+        self._pending_upscale_paths.discard(wallpaper_path)
+        # Only touch the overlay of the matching card - never a first-match
+        # fallback that would hide the wrong card's spinner (M13).
+        card = self._path_card_map.get(wallpaper_path)
         if success:
             if self.toast_service:
                 self.toast_service.show_success(message)
-            # Find and refresh the card by path
-            card = self._path_card_map.get(wallpaper_path)
             if card:
                 self._hide_upscale_overlay(card)
                 self._refresh_wallpaper_card_by_path(wallpaper_path)
-            else:
-                # Fallback: search in wallpaper map
-                for wp in self.view_model.wallpapers:
-                    if wp in self._wallpaper_card_map:
-                        card = self._wallpaper_card_map[wp]
-                        self._hide_upscale_overlay(card)
-                        self._refresh_wallpaper_card(wp)
-                        break
         else:
             if self.toast_service:
                 self.toast_service.show_error(message)
-            # Hide overlay even on failure
-            for wp in self.view_model.wallpapers:
-                if wp in self._wallpaper_card_map:
-                    card = self._wallpaper_card_map[wp]
-                    if card in self._upscale_overlays:
-                        self._hide_upscale_overlay(card)
-                    break
+            if card:
+                self._hide_upscale_overlay(card)
 
     def _on_queue_changed(self, view_model, queue_size: int, active_count: int):
         """Handle queue status changes."""
@@ -1063,14 +1102,26 @@ class LocalView(Adw.BreakpointBin):
                 else:
                     self.toast_service.show_info(f"Upscaling {active_count} item(s)...")
 
+    def _find_picture_in_card(self, card):
+        """Find the Gtk.Picture inside a card's image overlay."""
+        child = card.get_first_child()
+        while child:
+            if isinstance(child, Gtk.Overlay):
+                inner = child.get_child()
+                if isinstance(inner, Gtk.Picture):
+                    return inner
+            child = child.get_next_sibling()
+        return None
+
     def _refresh_wallpaper_card(self, wallpaper):
         """Refresh a single wallpaper card with visual flash effect."""
         card = self._wallpaper_card_map.get(wallpaper)
         if not card:
             return
 
-        # Get the image widget (first child after any overlays)
-        image = card.get_first_child()
+        path_str = str(wallpaper.path)
+        # The first child is the Overlay wrapping the Picture, not the Picture.
+        image = self._pictures.get(path_str) or self._find_picture_in_card(card)
         if not image:
             return
 
@@ -1080,9 +1131,8 @@ class LocalView(Adw.BreakpointBin):
                 image.set_paintable(texture)
 
         if self.thumbnail_loader:
-            self.thumbnail_loader.load_thumbnail_async(
-                str(wallpaper.path), on_thumbnail_loaded
-            )
+            self.thumbnail_loader.invalidate(path_str)
+            self.thumbnail_loader.load_thumbnail_async(path_str, on_thumbnail_loaded)
 
         # Add flash effect
         card.add_css_class("flash-animation")
@@ -1095,6 +1145,20 @@ class LocalView(Adw.BreakpointBin):
         card = self._path_card_map.get(path)
         if not card:
             return
+
+        # Reload the paintable so the upscaled image is actually shown (H2)
+        image = self._pictures.get(path) or self._find_picture_in_card(card)
+        if self.thumbnail_loader:
+            # The file changed on disk under the same path - drop the stale
+            # in-memory thumbnail before reloading.
+            self.thumbnail_loader.invalidate(path)
+            if image:
+
+                def on_thumbnail_loaded(texture):
+                    if texture:
+                        image.set_paintable(texture)
+
+                self.thumbnail_loader.load_thumbnail_async(path, on_thumbnail_loaded)
 
         wallpaper = None
         for wp in self.view_model.wallpapers:

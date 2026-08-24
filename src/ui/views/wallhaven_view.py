@@ -297,9 +297,13 @@ class WallhavenView(Adw.Bin):
 
     def _setup_scroll_snap(self):
         """Setup scroll snap for pagination at bottom."""
-        scroll_controller = Gtk.EventControllerScroll()
+        # VERTICAL flag is required - the default NONE delivers no events (H5)
+        scroll_controller = Gtk.EventControllerScroll(
+            flags=Gtk.EventControllerScrollFlags.VERTICAL
+        )
         scroll_controller.connect("scroll", self._on_scroll)
         self.scroll.add_controller(scroll_controller)
+        self._scroll_load_pending = False
 
     def _on_pull_swipe(self, gesture, dx, dy):
         """Handle pull-down gesture for refresh."""
@@ -317,17 +321,27 @@ class WallhavenView(Adw.Bin):
 
     def _on_scroll(self, controller, dx, dy):
         """Handle scroll snap for pagination."""
+        if self.view_model.is_busy or self._scroll_load_pending:
+            return
+
         vadj = self.scroll.get_vadjustment()
         page_size = vadj.get_page_size()
         value = vadj.get_value()
         upper = vadj.get_upper()
 
-        # At bottom of scroll - load next page
+        # At bottom of scroll - load next page (debounced)
         if (
             value + page_size >= upper - 10
             and self.view_model.current_page < self.view_model.total_pages
         ):
+            self._scroll_load_pending = True
             self._run_async(self.view_model.load_next_page())
+            GLib.timeout_add(1500, self._clear_scroll_load_pending)
+
+    def _clear_scroll_load_pending(self):
+        """Reset infinite-scroll debounce guard."""
+        self._scroll_load_pending = False
+        return False
 
     def _refresh_current_search(self):
         """Refresh current Wallhaven search."""
@@ -336,10 +350,11 @@ class WallhavenView(Adw.Bin):
             query = self.search_filter_bar.get_search_text()
             sorting = self.search_filter_bar.get_active_sort()
 
-            self.view_model.query = query
-            self.view_model.sorting = sorting
+            self.view_model.search_query = query or ""
+            if sorting:
+                self.view_model.sorting = sorting
 
-            await self.view_model.search_wallpapers()
+            await self.view_model.apply_current_filters_and_search()
 
         self._run_async(refresh())
 
@@ -375,17 +390,17 @@ class WallhavenView(Adw.Bin):
 
     def _on_search_clicked(self, button):
         query = self.search_filter_bar.get_search_text()
-        sorting = self.search_filter_bar.get_active_sort()
         advanced = self.search_filter_bar.get_advanced_filters()
 
-        self.view_model.query = query
-        self.view_model.sorting = sorting
-        self.view_model.top_range = advanced.get("top_range", "")
-        self.view_model.ratios = advanced.get("ratios", "")
-        self.view_model.colors = advanced.get("colors", "")
-        self.view_model.resolutions = advanced.get("resolutions", "")
+        self.view_model.search_query = query or ""
+        for key in ("top_range", "ratios", "colors", "resolutions"):
+            if key in advanced:
+                setattr(self.view_model, key, advanced[key])
 
-        self._run_async(self.view_model.search_wallpapers())
+        async def search_with_filters():
+            await self.view_model.apply_current_filters_and_search()
+
+        self._run_async(search_with_filters())
 
     def _on_prev_page_clicked(self, button):
         self._run_async(self.view_model.load_prev_page())

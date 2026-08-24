@@ -66,28 +66,33 @@ class MainWindow(Adw.Application):
         self.wallhaven_view_model = None
 
     def do_activate(self):
-        if not self.window:
-            # Load CSS before creating window
-            self._load_css()
+        # Re-activation (e.g. D-Bus relaunch) must present the existing window
+        # instead of rebuilding it and all ViewModels (M11).
+        if self.window is not None:
+            self.window.present()
+            return
 
-            self.config_service = ConfigService()
-            self.config = self.config_service.get_config()
+        # Load CSS before creating window
+        self._load_css()
 
-            self.wallpaper_setter = WallpaperSetter()
-            self.notification_service = NotificationService(
-                enabled=self.config.notifications_enabled if self.config else True
-            )
+        self.config_service = ConfigService()
+        self.config = self.config_service.get_config()
 
-            self.local_service = LocalWallpaperService(
-                pictures_dir=self.config.pictures_dir if self.config else None
-            )
-            self.favorites_service = FavoritesService()
-            self.wallhaven_service = WallhavenService()
-            self.thumbnail_cache = ThumbnailCache()
-            self.thumbnail_loader = ThumbnailLoader(
-                thumbnail_cache=self.thumbnail_cache
-            )
-            self.banner_service = BannerService(self)
+        self.wallpaper_setter = WallpaperSetter()
+        self.notification_service = NotificationService(
+            enabled=self.config.notifications_enabled if self.config else True
+        )
+
+        self.local_service = LocalWallpaperService(
+            pictures_dir=self.config.pictures_dir if self.config else None
+        )
+        self.favorites_service = FavoritesService()
+        self.wallhaven_service = WallhavenService()
+        self.thumbnail_cache = ThumbnailCache()
+        self.thumbnail_loader = ThumbnailLoader(
+            thumbnail_cache=self.thumbnail_cache
+        )
+        self.banner_service = BannerService(self)
 
         self.wallhaven_view_model = WallhavenViewModel(
             wallhaven_service=self.wallhaven_service,
@@ -266,6 +271,7 @@ class WallPickerWindow(Adw.ApplicationWindow):
         self.toast_service = ToastService(self)
 
         self.local_view_model.toast_service = self.toast_service
+        self.favorites_view_model.toast_service = self.toast_service
 
         self.toolbar_view = Adw.ToolbarView()
 
@@ -508,8 +514,13 @@ class WallPickerWindow(Adw.ApplicationWindow):
             elif keyval == Gdk.KEY_3:
                 self.stack.set_visible_child_name("favorites")
                 return True
-            elif keyval == Gdk.KEY_Tab:  # Ctrl+Tab: Next tab
-                self._next_tab()
+            elif keyval == Gdk.KEY_Tab:  # Ctrl+Tab: Next / Ctrl+Shift+Tab: Previous
+                # Shift must be checked here - a separate later branch would
+                # never be reached because this one matches Tab first (M12).
+                if state & Gdk.ModifierType.SHIFT_MASK:
+                    self._prev_tab()
+                else:
+                    self._next_tab()
                 return True
             elif keyval == Gdk.KEY_f:  # Ctrl+F: Focus search
                 self._focus_search_entry()
@@ -520,19 +531,6 @@ class WallPickerWindow(Adw.ApplicationWindow):
             elif keyval == Gdk.KEY_n:  # Ctrl+N: New search
                 self._focus_search_entry(clear=True)
                 return True
-
-        # Ctrl/Cmd + Shift + Tab: Previous tab
-        elif (
-            state
-            & (
-                Gdk.ModifierType.CONTROL_MASK
-                | Gdk.ModifierType.SUPER_MASK
-                | Gdk.ModifierType.SHIFT_MASK
-            )
-            and keyval == Gdk.KEY_Tab
-        ):
-            self._prev_tab()
-            return True
 
         # Alt + 1/2/3 : Alternative direct tab selection
         elif state & Gdk.ModifierType.ALT_MASK:

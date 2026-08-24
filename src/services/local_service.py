@@ -31,6 +31,9 @@ class LocalWallpaper(GObject.Object):
         self.modified_time = modified_time
         self._resolution = resolution
         self._tags = tags if tags is not None else []
+        # Tracks whether the tag cache has been consulted, so a negative
+        # result is not re-read from disk on every property access (L2).
+        self._tags_loaded = tags is not None
 
     @property
     def resolution(self):
@@ -45,13 +48,14 @@ class LocalWallpaper(GObject.Object):
     @property
     def tags(self) -> list[str]:
         """Get tags, loading from cache if needed."""
-        if not self._tags:
+        if not self._tags and not self._tags_loaded:
             self._load_tags()
         return self._tags
 
     @tags.setter
     def tags(self, value: list[str]):
         self._tags = value
+        self._tags_loaded = True
 
     def _load_resolution(self):
         try:
@@ -75,6 +79,19 @@ class LocalWallpaper(GObject.Object):
             self._tags = LocalWallpaper._tag_storage.get_tags(self.path)
         except Exception:
             self._tags = []
+        finally:
+            self._tags_loaded = True
+
+    def ensure_metadata_loaded(self):
+        """Eagerly load resolution and tags.
+
+        Called at scan time from a worker thread so PIL decodes and tag-cache
+        JSON reads never happen lazily on the GTK main thread (H7).
+        """
+        if self._resolution is None:
+            self._load_resolution()
+        if not self._tags and not self._tags_loaded:
+            self._load_tags()
 
 
 class LocalWallpaperService:
@@ -93,7 +110,17 @@ class LocalWallpaperService:
     async def get_wallpapers_async(
         self, recursive: bool = True
     ) -> list[LocalWallpaper]:
-        return await asyncio.to_thread(self._get_wallpapers_sync, recursive)
+        wallpapers = await asyncio.to_thread(self._get_wallpapers_sync, recursive)
+        # Pre-resolve resolutions and tags off the UI thread so sorting and
+        # filtering do not trigger hundreds of blocking PIL/JSON reads later.
+        await asyncio.to_thread(self._preload_metadata_sync, wallpapers)
+        return wallpapers
+
+    @staticmethod
+    def _preload_metadata_sync(wallpapers: list[LocalWallpaper]) -> None:
+        """Load resolution/tags for each wallpaper (worker thread only)."""
+        for wp in wallpapers:
+            wp.ensure_metadata_loaded()
 
     def _get_wallpapers_sync(self, recursive: bool = True) -> list[LocalWallpaper]:
         """

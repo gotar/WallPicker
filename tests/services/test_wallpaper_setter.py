@@ -385,8 +385,8 @@ class TestCleanupOldWallpapers:
             # No wallpaper files exist
             setter._cleanup_old_wallpapers()
 
-            # Should not raise error
-            assert True
+            # Should not raise error, and no wallpaper files should exist afterwards
+            assert list(setter.cache_dir.glob("wallpaper_*")) == []
 
     def test_cleanup_exactly_ten_files(self, tmp_path):
         """Test cleanup with exactly 10 files"""
@@ -447,3 +447,87 @@ class TestGetCurrentWallpaper:
 
             # Should return None
             assert result is None
+
+
+class TestSetWallpaperAsyncFailurePaths:
+    """Test set_wallpaper_async failure handling"""
+
+    @pytest.fixture
+    def test_image_path(self, tmp_path):
+        """Create a test image path"""
+        test_file = tmp_path / "wallpaper.jpg"
+        test_file.write_bytes(b"test image data")
+        return str(test_file)
+
+    def test_returns_false_when_daemon_check_fails(self, test_image_path):
+        """OSError while probing the daemon results in False, not an exception"""
+        with patch("pathlib.Path.home"):
+            setter = WallpaperSetter()
+
+            with patch.object(
+                setter,
+                "_ensure_daemon_running",
+                side_effect=OSError("pgrep missing"),
+            ):
+                import asyncio
+
+                assert asyncio.run(setter.set_wallpaper_async(test_image_path)) is False
+
+    def test_returns_false_when_apply_wallpaper_raises(self, test_image_path):
+        """A failing awww transition is reported as False"""
+        with patch("pathlib.Path.home"):
+            setter = WallpaperSetter()
+
+            with patch.object(setter, "_ensure_daemon_running", new=AsyncMock()):
+                with patch.object(
+                    setter,
+                    "_apply_wallpaper",
+                    new=AsyncMock(side_effect=RuntimeError("awww failed")),
+                ):
+                    import asyncio
+
+                    result = asyncio.run(
+                        setter.set_wallpaper_async(test_image_path)
+                    )
+
+                    assert result is False
+
+    def test_sync_set_wallpaper_swallows_unexpected_errors(self, test_image_path):
+        """set_wallpaper returns False instead of raising on unexpected errors"""
+        with patch("pathlib.Path.home"):
+            setter = WallpaperSetter()
+
+            with patch(
+                "services.wallpaper_setter.get_event_loop",
+                side_effect=ValueError("loop broken"),
+            ):
+                result = setter.set_wallpaper(test_image_path)
+
+                # ValueError propagates out of asyncio.run fallback -> caught
+                assert result is False
+
+    def test_returns_false_when_symlink_update_fails(self, test_image_path):
+        """Symlink creation failure (e.g. read-only dir) results in False"""
+        with patch("pathlib.Path.home"):
+            setter = WallpaperSetter()
+
+            with patch.object(setter, "_ensure_daemon_running", new=AsyncMock()):
+                with patch.object(
+                    setter,
+                    "_update_symlink",
+                    side_effect=OSError("read-only file system"),
+                ):
+                    import asyncio
+
+                    result = asyncio.run(
+                        setter.set_wallpaper_async(test_image_path)
+                    )
+
+                    assert result is False
+
+    async def test_async_returns_false_for_missing_file(self):
+        """Non-existent source returns False without spawning anything"""
+        with patch("pathlib.Path.home"):
+            setter = WallpaperSetter()
+
+            assert await setter.set_wallpaper_async("/nonexistent/wp.jpg") is False

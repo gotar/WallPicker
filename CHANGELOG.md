@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.4] - 2026-08-24
+
+### Fixed
+- Data integrity (Phase 1): atomic writes for config/favorites, upscale backup
+  restore on failed replacement, subprocess timeouts for clip-cpp/notification
+  helpers, tolerant parsing of malformed favorites entries, stable thumbnail
+  cache keys (md5), TOCTOU guards in the thumbnail cache, zero-division guard
+  in `Resolution.aspect_ratio`
+- Threading correctness (Phase 2): all GObject property writes, signal
+  emissions and toasts marshalled to the GTK main thread via `GLib.idle_add`;
+  separate lock-protected concurrency counters for the upscale and tag queues;
+  stale async results discarded via generation counters; preview dialog decodes
+  images off-thread but builds textures on the main thread
+- Broken features (Phase 3): single-card refresh after upscaling, remote
+  previews for uncached Wallhaven items, search/pull-to-refresh honoring active
+  filters, infinite-scroll event flags, Wallhaven category bitmask filters,
+  filter-chip key normalization, window re-activation guard, Shift+Tab keyboard
+  navigation, favorites toast service injection, per-path pending-work tracking
+  for queue completion overlays
+
+### Changed
+- Packaging: version unified at 2.5.4 across pyproject.toml, PKGBUILD and
+  .SRCINFO; removed unused `requests` dependency; `clip-anytorch` is now an
+  optional `[tagger]` extra; install.sh creates a dedicated virtualenv
+  (PEP 668-safe) and patches the correct desktop-entry Exec/Icon lines
+- Hygiene: removed dead code (`main.py`, unused `WallpaperCard` component,
+  unwired `ServiceContainer`, unread `_needs_full_rebuild` flag); moved the
+  stray root `test_tagging.py` manual script to `scripts/manual_tagging_check.py`
+- Tests: added tag-generation detection/timeout tests, queue-concurrency tests,
+  wallpaper-setter failure paths, atomic-write tests; replaced placeholder
+  assertions; removed deprecated `event_loop` fixture and redundant asyncio
+  markers; coverage ~61% and rising
+
 ## [2.5.3] - 2026-01-20
 
 ### Fixed

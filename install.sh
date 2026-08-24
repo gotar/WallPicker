@@ -23,7 +23,7 @@ echo "Installing system dependencies..."
 if command -v apt-get &> /dev/null; then
     # Ubuntu/Debian
     sudo apt-get update
-    sudo apt-get install -y python3-pip python3-gi libgirepository1.0-dev \
+    sudo apt-get install -y python3-pip python3-venv python3-gi libgirepository1.0-dev \
         gir1.2-gtk-4.0 gir1.2-adw-1
 elif command -v dnf &> /dev/null; then
     # Fedora
@@ -37,13 +37,26 @@ else
     echo "Required: python3, python3-gobject, gtk4, libadwaita"
 fi
 
-# Install Python dependencies
-echo "Installing Python dependencies..."
-pip3 install --user -r "$SCRIPT_DIR/requirements.txt"
-
-# Create installation directory
+# Create installation directories
 echo "Creating installation directories..."
 mkdir -p "$INSTALL_DIR"
+
+# Install Python dependencies into a dedicated virtualenv (PEP 668-safe).
+echo "Installing Python dependencies..."
+if python3 -m venv "$INSTALL_DIR/venv" 2>/dev/null; then
+    "$INSTALL_DIR/venv/bin/pip" install --upgrade pip >/dev/null
+    "$INSTALL_DIR/venv/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
+    USE_VENV=1
+else
+    echo "Warning: could not create a virtualenv (is 'python3-venv' installed?)."
+    # Fall back to --break-system-packages for PEP 668 (externally managed) systems.
+    if ! pip3 install --user -r "$SCRIPT_DIR/requirements.txt" 2>/dev/null; then
+        pip3 install --user --break-system-packages -r "$SCRIPT_DIR/requirements.txt"
+    fi
+    USE_VENV=0
+fi
+
+# Create remaining directories
 mkdir -p "$BIN_DIR"
 mkdir -p ~/.config/wallpicker
 mkdir -p ~/.cache/wallpicker/thumbnails
@@ -57,9 +70,17 @@ cp "$SCRIPT_DIR/wallpicker" "$INSTALL_DIR/"
 # Make entry point executable
 chmod +x "$INSTALL_DIR/wallpicker"
 
-# Create symlink in bin directory
-echo "Creating executable symlink..."
-ln -sf "$INSTALL_DIR/wallpicker" "$BIN_DIR/wallpicker"
+# Create launcher in bin directory (uses the virtualenv when available)
+echo "Creating executable launcher..."
+if [ "$USE_VENV" = "1" ]; then
+    cat > "$BIN_DIR/wallpicker" << EOF
+#!/bin/bash
+exec "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/wallpicker" "\$@"
+EOF
+    chmod +x "$BIN_DIR/wallpicker"
+else
+    ln -sf "$INSTALL_DIR/wallpicker" "$BIN_DIR/wallpicker"
+fi
 
 # Install icon
 echo "Installing icon..."
@@ -73,11 +94,10 @@ echo "Creating desktop entry..."
 mkdir -p "$DESKTOP_DIR"
 
 if [ -f "$SCRIPT_DIR/wallpicker.desktop" ]; then
-    # Use existing desktop file and update paths
-    sed "s|Exec=/home/gotar/Programowanie/wallpicker/launcher.sh|Exec=$BIN_DIR/wallpicker|g" \
+    # Use existing desktop file and update paths to the actual entries
+    sed -e "s|^Exec=/usr/bin/wallpicker|Exec=$BIN_DIR/wallpicker|" \
+        -e "s|^Icon=wallpicker\$|Icon=$ICON_DIR/wallpicker.svg|" \
         "$SCRIPT_DIR/wallpicker.desktop" > "$DESKTOP_DIR/wallpicker.desktop"
-    sed -i "s|Icon=/home/gotar/Programowanie/wallpicker/data/wallpaper-icon.svg|Icon=$ICON_DIR/wallpicker.svg|g" \
-        "$DESKTOP_DIR/wallpicker.desktop"
 else
     # Fallback: create desktop entry from scratch
     cat > "$DESKTOP_DIR/wallpicker.desktop" << EOF

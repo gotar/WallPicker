@@ -201,3 +201,38 @@ def test_get_config_caches_result(config_service: ConfigService, temp_dir: Path)
     config2 = config_service.get_config()
 
     assert config1 is config2
+
+
+class TestAtomicConfigWrites:
+    """M1: config must be written atomically (tmp file + os.replace)."""
+
+    def test_save_leaves_no_tmp_file_behind(
+        self, config_service: ConfigService, temp_dir: Path
+    ):
+
+        from domain.config import Config
+
+        pictures = temp_dir / "pictures"
+        pictures.mkdir()
+        config = Config(local_wallpapers_dir=pictures)
+
+        config_service.save_config(config)
+
+        assert list(temp_dir.glob("*.tmp")) == []
+        assert config_service.config_file.exists()
+
+    def test_saved_config_is_complete_valid_json(
+        self, config_service: ConfigService, temp_dir: Path
+    ):
+        import json
+
+        from domain.config import Config
+
+        pictures = temp_dir / "pictures"
+        pictures.mkdir()
+        config = Config(local_wallpapers_dir=pictures, wallhaven_api_key="abc")
+
+        config_service.save_config(config)
+
+        data = json.loads(config_service.config_file.read_text())
+        assert data["wallhaven_api_key"] == "abc"

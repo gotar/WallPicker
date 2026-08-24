@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
  name = "wallpicker"
- version = "2.5.3"
+ version = "2.5.4"
  description = "Modern GTK4/Libadwaita wallpaper picker with Wallhaven integration"
 readme = "README.md"
 license = "MIT"
@@ -26,7 +26,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "requests>=2.31.0",
     "Pillow>=10.0.0",
     "PyGObject>=3.46.0",
     "send2trash>=1.8.2",
@@ -35,6 +34,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# AI tagging via CLIP (optional, heavyweight)
+tagger = [
+    "clip-anytorch>=1.0.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
@@ -109,8 +112,9 @@ ignore_missing_imports = true
 
 # Temporary: App modules have many type errors; full typing is a future task.
 # This allows CI mypy to pass while we work on async refactor and bug fixes.
+# core/ and domain/ are fully checked; ui/ and services/ remain excluded.
 [[tool.mypy.overrides]]
-module = ["ui", "ui.*", "services", "services.*", "domain", "domain.*", "core.container"]
+module = ["ui", "ui.*", "services", "services.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]

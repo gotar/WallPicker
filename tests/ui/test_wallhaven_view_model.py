@@ -1,6 +1,5 @@
 """Tests for WallhavenViewModel."""
 
-import pytest
 
 
 class TestWallhavenViewModelInit:
@@ -28,7 +27,6 @@ class TestWallhavenViewModelInit:
 class TestWallhavenViewModelSearchWallpapers:
     """Test search_wallpapers method."""
 
-    @pytest.mark.asyncio
     async def test_search_wallpapers_success(
         self, wallhaven_view_model, mock_wallhaven_service
     ):
@@ -40,7 +38,6 @@ class TestWallhavenViewModelSearchWallpapers:
         assert wallhaven_view_model.search_query == "nature"
         assert wallhaven_view_model.is_busy is False
 
-    @pytest.mark.asyncio
     async def test_search_with_filters(
         self, wallhaven_view_model, mock_wallhaven_service
     ):
@@ -56,7 +53,6 @@ class TestWallhavenViewModelSearchWallpapers:
         assert wallhaven_view_model.purity == "110"
         assert wallhaven_view_model.sorting == "random"
 
-    @pytest.mark.asyncio
     async def test_search_error_handling(
         self, wallhaven_view_model, mock_wallhaven_service
     ):
@@ -71,7 +67,6 @@ class TestWallhavenViewModelSearchWallpapers:
         # The grid starts empty here, so it stays empty.
         assert wallhaven_view_model.wallpapers == []
 
-    @pytest.mark.asyncio
     async def test_search_error_preserves_existing_wallpapers(
         self, wallhaven_view_model, mock_wallhaven_service
     ):
@@ -85,7 +80,6 @@ class TestWallhavenViewModelSearchWallpapers:
         assert wallhaven_view_model.error_message is not None
         assert len(wallhaven_view_model.wallpapers) == 3
 
-    @pytest.mark.asyncio
     async def test_apply_current_filters_and_search_uses_own_properties(
         self, wallhaven_view_model, mock_wallhaven_service
     ):
@@ -110,7 +104,6 @@ class TestWallhavenViewModelSearchWallpapers:
 class TestWallhavenViewModelPagination:
     """Test pagination methods."""
 
-    @pytest.mark.asyncio
     async def test_load_next_page(self, wallhaven_view_model, mock_wallhaven_service):
         """Test loading next page."""
         # First search
@@ -124,7 +117,6 @@ class TestWallhavenViewModelPagination:
 
         assert wallhaven_view_model.current_page == initial_page + 1
 
-    @pytest.mark.asyncio
     async def test_load_prev_page(self, wallhaven_view_model, mock_wallhaven_service):
         """Test loading previous page."""
         # First search at page 2
@@ -134,7 +126,6 @@ class TestWallhavenViewModelPagination:
 
         assert wallhaven_view_model.current_page == 1
 
-    @pytest.mark.asyncio
     async def test_load_prev_page_at_first(
         self, wallhaven_view_model, mock_wallhaven_service
     ):

@@ -58,7 +58,6 @@ class TestWallhavenServiceInit:
 class TestGetSession:
     """Tests for _get_session method."""
 
-    @pytest.mark.asyncio
     async def test_create_session_with_api_key(self):
         """Test creating session with API key."""
         service = WallhavenService(api_key="test_key")
@@ -68,7 +67,6 @@ class TestGetSession:
 
             mock_session_cls.assert_called_once_with(headers={"X-API-Key": "test_key"})
 
-    @pytest.mark.asyncio
     async def test_create_session_without_api_key(self):
         """Test creating session without API key."""
         service = WallhavenService()
@@ -79,7 +77,6 @@ class TestGetSession:
             # Even without API key, headers={} is passed
             mock_session_cls.assert_called_once_with(headers={})
 
-    @pytest.mark.asyncio
     async def test_reuse_existing_session(self):
         """Test reusing existing session."""
         service = WallhavenService()
@@ -89,7 +86,6 @@ class TestGetSession:
 
         assert session is service._session
 
-    @pytest.mark.asyncio
     async def test_create_new_session_after_close(self):
         """Test creating new session after closing previous one."""
         service = WallhavenService()
@@ -105,7 +101,6 @@ class TestGetSession:
 class TestRateLimit:
     """Tests for _rate_limit method."""
 
-    @pytest.mark.asyncio
     async def test_rate_limit_no_delay(self):
         """Test rate limiting when enough time has passed."""
         service = WallhavenService()
@@ -116,7 +111,6 @@ class TestRateLimit:
 
             mock_sleep.assert_not_called()
 
-    @pytest.mark.asyncio
     async def test_rate_limit_with_delay(self):
         """Test rate limiting when not enough time has passed."""
         service = WallhavenService()
@@ -179,7 +173,6 @@ class TestSearch:
         """Create WallhavenService instance."""
         return WallhavenService()
 
-    @pytest.mark.asyncio
     async def test_search_success(self, wallhaven_service, sample_wallpaper_response):
         """Test successful search."""
         with patch.object(wallhaven_service, "_get_session") as mock_get_session:
@@ -205,7 +198,6 @@ class TestSearch:
                 assert meta["last_page"] == 5
                 mock_rate_limit.assert_called_once()
 
-    @pytest.mark.asyncio
     async def test_search_with_params(self, wallhaven_service):
         """Test search with custom parameters."""
         with patch.object(wallhaven_service, "_get_session") as mock_get_session:
@@ -252,7 +244,6 @@ class TestSearch:
                 assert params["order"] == "asc"
                 assert params["atleast"] == "1920x1080"
 
-    @pytest.mark.asyncio
     async def test_search_http_error(self, wallhaven_service):
         """Test search with HTTP error."""
         with patch.object(wallhaven_service, "_get_session") as mock_get_session:
@@ -274,7 +265,6 @@ class TestSearch:
                 with pytest.raises(ServiceError, match="Failed to search Wallhaven"):
                     await wallhaven_service.search()
 
-    @pytest.mark.asyncio
     async def test_search_malformed_wallpaper(
         self, wallhaven_service, sample_wallpaper_response
     ):
@@ -299,7 +289,6 @@ class TestSearch:
 
                 assert len(wallpapers) == 2  # Only valid ones
 
-    @pytest.mark.asyncio
     async def test_search_empty_results(self, wallhaven_service):
         """Test search with no results."""
         with patch.object(wallhaven_service, "_get_session") as mock_get_session:
@@ -401,7 +390,6 @@ class TestDownload:
         """Create WallhavenService instance."""
         return WallhavenService()
 
-    @pytest.mark.asyncio
     async def test_download_success(self, wallhaven_service, tmp_path):
         """Test successful download."""
         wallpaper = Wallpaper(
@@ -447,7 +435,6 @@ class TestDownload:
                 assert dest.exists()
                 assert dest.read_bytes() == chunk_data
 
-    @pytest.mark.asyncio
     async def test_download_with_progress_callback(self, wallhaven_service, tmp_path):
         """Test download with progress callback."""
         wallpaper = Wallpaper(
@@ -495,7 +482,6 @@ class TestDownload:
                     downloaded <= len(chunk_data) for downloaded, _ in progress_updates
                 )
 
-    @pytest.mark.asyncio
     async def test_download_http_error(self, wallhaven_service, tmp_path):
         """Test download with HTTP error."""
         wallpaper = Wallpaper(
@@ -531,7 +517,6 @@ class TestDownload:
                 assert result is False
                 assert not dest.exists()
 
-    @pytest.mark.asyncio
     async def test_download_failure_removes_partial_file(
         self, wallhaven_service, tmp_path
     ):
@@ -579,7 +564,6 @@ class TestDownload:
 class TestClose:
     """Tests for close method."""
 
-    @pytest.mark.asyncio
     async def test_close_session(self):
         """Test closing session."""
         service = WallhavenService()
@@ -593,7 +577,6 @@ class TestClose:
         # The _session remains but is now closed
         assert service._session is not None
 
-    @pytest.mark.asyncio
     async def test_close_already_closed(self):
         """Test closing already closed session."""
         service = WallhavenService()
@@ -603,7 +586,6 @@ class TestClose:
 
         # Should not raise any error
 
-    @pytest.mark.asyncio
     async def test_close_without_session(self):
         """Test closing when session was never created."""
         service = WallhavenService()

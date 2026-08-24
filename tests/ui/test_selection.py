@@ -1,6 +1,5 @@
 """Tests for selection functionality in ViewModels."""
 
-import pytest
 
 
 class TestSelection:
@@ -43,7 +42,6 @@ class TestSelection:
         assert wallpaper not in selected
         assert local_view_model.selected_count == 0
 
-    @pytest.mark.asyncio
     async def test_select_all_selects_all_wallpapers(
         self, local_view_model, mock_local_service
     ):
@@ -56,7 +54,6 @@ class TestSelection:
         assert len(selected) == len(local_view_model.wallpapers)
         assert local_view_model.selected_count == len(local_view_model.wallpapers)
 
-    @pytest.mark.asyncio
     async def test_deselect_all_clears_selection(
         self, local_view_model, mock_local_service
     ):
@@ -70,7 +67,6 @@ class TestSelection:
         assert len(selected) == 0
         assert local_view_model.selected_count == 0
 
-    @pytest.mark.asyncio
     async def test_clear_selection_exits_selection_mode(
         self, local_view_model, mock_local_service
     ):
@@ -150,7 +146,6 @@ class TestSelection:
 class TestWallhavenViewModelSelection:
     """Test selection functionality in WallhavenViewModel."""
 
-    @pytest.mark.asyncio
     async def test_wallhaven_selection_with_wallpapers(
         self, wallhaven_view_model, mock_wallhaven_service
     ):
@@ -169,7 +164,6 @@ class TestWallhavenViewModelSelection:
 class TestFavoritesViewModelSelection:
     """Test selection functionality in FavoritesViewModel."""
 
-    @pytest.mark.asyncio
     async def test_favorites_selection_with_favorites(self, favorites_view_model):
         """Test selection works with favorites."""
         await favorites_view_model.load_favorites()

@@ -58,7 +58,6 @@ class LocalView(Adw.BreakpointBin):
         self._pictures = {}  # path -> Gtk.Picture, for single-card refresh (H2)
         self._pending_upscale_paths = set()  # paths with in-flight upscale (M13)
         self._pending_tag_paths = set()  # paths with in-flight tagging (M13)
-        self._needs_full_rebuild = False
 
         # Pagination state
         self._all_wallpapers = []  # Current view (may be filtered)
@@ -216,7 +215,6 @@ class LocalView(Adw.BreakpointBin):
         return False
 
     def _on_sort_changed(self, sorting: str):
-        self._needs_full_rebuild = True
         if sorting == "name":
             self.view_model.sort_by_name()
         elif sorting == "date":
@@ -225,7 +223,6 @@ class LocalView(Adw.BreakpointBin):
             self.view_model.sort_by_resolution()
 
     def _on_filter_changed(self, filters: dict):
-        self._needs_full_rebuild = True
         self.view_model.filter_wallpapers(filters)
 
     def update_status(self, count: int):

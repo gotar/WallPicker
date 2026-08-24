@@ -11,7 +11,6 @@ depends=(
   'python-gobject'
   'gtk4'
   'libadwaita'
-  'python-requests'
   'python-pillow'
   'python-send2trash'
   'python-aiohttp'

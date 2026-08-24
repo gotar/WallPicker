@@ -361,3 +361,49 @@ def test_parse_favorites_data_skips_malformed_list_entries(
     assert "good1" in ids
     assert "good2" in ids
     assert len(favorites) == 2
+
+
+class TestAtomicWrites:
+    """M1: favorites must be written atomically (tmp file + os.replace)."""
+
+    def test_save_leaves_no_tmp_file_behind(
+        self, favorites_service: FavoritesService, sample_wallpaper: Wallpaper
+    ):
+        favorites_service.add_favorite(sample_wallpaper)
+
+        assert favorites_service.favorites_file.exists()
+        tmp_files = list(favorites_service.favorites_dir.glob("*.tmp"))
+        assert tmp_files == []
+
+    def test_saved_file_is_complete_valid_json(
+        self, favorites_service: FavoritesService, sample_wallpaper: Wallpaper
+    ):
+        favorites_service.add_favorite(sample_wallpaper)
+
+        data = json.loads(favorites_service.favorites_file.read_text())
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["wallpaper"]["id"] == sample_wallpaper.id
+
+    def test_load_tolerates_malformed_file_entries(
+        self, favorites_service: FavoritesService
+    ):
+        """A malformed on-disk entry is skipped; valid entries still load."""
+        good = {
+            "wallpaper": {
+                "id": "good1",
+                "url": "http://example.com/1",
+                "path": "http://example.com/1.jpg",
+                "resolution": {"width": 1920, "height": 1080},
+                "source": "wallhaven",
+                "purity": "sfw",
+            },
+            "added_at": "2024-01-01T00:00:00",
+        }
+        favorites_service.favorites_file.write_text(json.dumps([good, {"bad": 1}]))
+        # Ensure the parent dir exists (file written directly in the fixture dir).
+        assert favorites_service.favorites_file.exists()
+
+        favorites = favorites_service.get_favorites()
+
+        assert [f.wallpaper_id for f in favorites] == ["good1"]

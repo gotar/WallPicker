@@ -4,7 +4,7 @@
 **Type:** Python GTK4 + Libadwaita Desktop App (MVVM Architecture)
 
 ## OVERVIEW
-Wallpaper picker with multi-source support (Wallhaven API + local files). Features a modern MVVM architecture, async operations, dependency injection, and comprehensive testing.
+Wallpaper picker with multi-source support (Wallhaven API + local files). Features a modern MVVM architecture, async operations, constructor-injected services, and comprehensive testing.
 
 **Phase 2 Complete:** AI upscaling with waifu2x, AI tagging with CLIP models, concurrent queue processing, resolution sorting, and single-card refresh.
 
@@ -12,7 +12,7 @@ Wallpaper picker with multi-source support (Wallhaven API + local files). Featur
 ```
 ./
 ├── src/
-│   ├── core/         # Core infrastructure (DI container, logging)
+│   ├── core/         # Core infrastructure (asyncio/GTK integration, logging)
 │   ├── domain/       # Domain entities and value objects
 │   ├── services/     # Business logic services (Async)
 │   └── ui/           # UI Layer (MVVM)
@@ -27,8 +27,7 @@ Wallpaper picker with multi-source support (Wallhaven API + local files). Featur
 
 | Component | Location | Description |
 |-----------|----------|-------------|
-| **Entry Point** | `src/ui/main_window.py` | Orchestrates DI container and ViewModels with Adw.ToolbarView |
-| **DI Container** | `src/core/container.py` | Manages service lifecycles and dependencies |
+| **Entry Point** | `src/ui/main_window.py` | Orchestrates ViewModels and services with Adw.ToolbarView |
 | **Domain Models** | `src/domain/` | Rich entities (Wallpaper, Config) |
 | **Wallhaven** | `src/services/wallhaven_service.py` | Async API client (aiohttp) |
 | **Local Files** | `src/services/local_service.py` | Local file management |
@@ -76,7 +75,7 @@ Wallpaper picker with multi-source support (Wallhaven API + local files). Featur
 
 ### Testing
 - **Framework**: `pytest`
-- **Coverage**: >95%
+- **Coverage**: ~60% (target: >95%; see docs/code-review-2026-08-24.md Phase 4)
 - **Fixtures**: `tests/conftest.py` handles mock services and async loops.
 - **Structure**: Tests mirror source directory structure.
 

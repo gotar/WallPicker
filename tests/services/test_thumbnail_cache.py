@@ -188,7 +188,6 @@ class TestCleanup:
 class TestDownloadAndCache:
     """Test download_and_cache method."""
 
-    @pytest.mark.asyncio
     async def test_download_http_error(
         self, tmp_path: Path, aiohttp_session, mocker: MockerFixture
     ):
@@ -204,7 +203,6 @@ class TestDownloadAndCache:
         with pytest.raises(ServiceError):
             await cache.download_and_cache(url, aiohttp_session)
 
-    @pytest.mark.asyncio
     async def test_download_calls_cleanup(self, tmp_path: Path, mocker: MockerFixture):
         """Test download_and_cache calls cleanup."""
         from aiohttp import ClientError
@@ -233,7 +231,6 @@ class TestDownloadAndCache:
 class TestGetOrDownload:
     """Test get_or_download method."""
 
-    @pytest.mark.asyncio
     async def test_get_or_download_cache_hit(
         self, tmp_path: Path, mocker: MockerFixture
     ):
@@ -272,7 +269,6 @@ class TestCleanupRobustness:
 class TestAtomicCacheWrite:
     """Test that cache entries are written atomically."""
 
-    @pytest.mark.asyncio
     async def test_download_leaves_no_tmp_files(
         self, tmp_path: Path, mocker: MockerFixture
     ):

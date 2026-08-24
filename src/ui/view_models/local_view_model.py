@@ -603,128 +603,123 @@ class LocalViewModel(BaseViewModel):
         Returns:
             Tuple of (success, message)
         """
+        # Check if waifu2x is available
+        if not shutil.which("waifu2x-ncnn-vulkan"):
+            result = False, "waifu2x-ncnn-vulkan not found in PATH"
+            self._finish_upscale(wallpaper, *result)
+            return result
+
+        # realesrgan-ncnn-vulkan models directory
+        # model_path = Path.home() / ".local/lib/realesrgan-ncnn-vulkan/models"
+
+        # Create temp file for upscaled image
+        temp_path = (
+            wallpaper.path.parent
+            / f"{wallpaper.path.stem}_upscaled{wallpaper.path.suffix}"
+        )
+
         try:
-            # Check if waifu2x is available
-            if not shutil.which("waifu2x-ncnn-vulkan"):
-                result = False, "waifu2x-ncnn-vulkan not found in PATH"
+            # Use waifu2x (no RADV driver bugs) with CPU mode
+            process = await asyncio.create_subprocess_exec(
+                "waifu2x-ncnn-vulkan",
+                "-i",
+                str(wallpaper.path),
+                "-o",
+                str(temp_path),
+                "-s",
+                "2",
+                "-n",
+                "1",
+                "-g",
+                "-1",  # CPU mode
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                stderr_text = stderr.decode("utf-8", errors="replace").strip()
+                result = (
+                    False,
+                    f"Upscaling failed: {stderr_text or 'Unknown error'}",
+                )
                 self._finish_upscale(wallpaper, *result)
                 return result
 
-            # realesrgan-ncnn-vulkan models directory
-            # model_path = Path.home() / ".local/lib/realesrgan-ncnn-vulkan/models"
+            # Check if output was created
+            if not temp_path.exists():
+                result = False, "Upscaling produced no output"
+                self._finish_upscale(wallpaper, *result)
+                return result
 
-            # Create temp file for upscaled image
-            temp_path = (
+            # Get original file size
+            original_size = wallpaper.path.stat().st_size
+
+            # Replace original with upscaled version
+            backup_path = (
                 wallpaper.path.parent
-                / f"{wallpaper.path.stem}_upscaled{wallpaper.path.suffix}"
+                / f"{wallpaper.path.stem}_backup{wallpaper.path.suffix}"
             )
 
             try:
-                # Use waifu2x (no RADV driver bugs) with CPU mode
-                process = await asyncio.create_subprocess_exec(
-                    "waifu2x-ncnn-vulkan",
-                    "-i",
-                    str(wallpaper.path),
-                    "-o",
-                    str(temp_path),
-                    "-s",
-                    "2",
-                    "-n",
-                    "1",
-                    "-g",
-                    "-1",  # CPU mode
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await process.communicate()
-
-                if process.returncode != 0:
-                    stderr_text = stderr.decode("utf-8", errors="replace").strip()
-                    result = (
-                        False,
-                        f"Upscaling failed: {stderr_text or 'Unknown error'}",
-                    )
-                    self._finish_upscale(wallpaper, *result)
-                    return result
-
-                # Check if output was created
-                if not temp_path.exists():
-                    result = False, "Upscaling produced no output"
-                    self._finish_upscale(wallpaper, *result)
-                    return result
-
-                # Get original file size
-                original_size = wallpaper.path.stat().st_size
-
-                # Replace original with upscaled version
-                backup_path = (
-                    wallpaper.path.parent
-                    / f"{wallpaper.path.stem}_backup{wallpaper.path.suffix}"
-                )
+                # Verify upscaled image is valid before replacing
+                from PIL import Image
 
                 try:
-                    # Verify upscaled image is valid before replacing
-                    from PIL import Image
-
-                    try:
-                        with Image.open(temp_path) as img:
-                            width, height = img.size
-                            if width < 100 or height < 100:
-                                raise ValueError(
-                                    f"Invalid dimensions: {width}x{height}"
-                                )
-                    except Exception as verify_error:
-                        if temp_path.exists():
-                            temp_path.unlink()
-                        result = False, f"Upscaled image is invalid: {verify_error}"
-                        self._finish_upscale(wallpaper, *result)
-                        return result
-
-                    # Move original to backup
-                    wallpaper.path.rename(backup_path)
-                    # Move upscaled to original location
-                    temp_path.rename(wallpaper.path)
-                    # Remove backup
-                    backup_path.unlink()
-                except OSError as e:
+                    with Image.open(temp_path) as img:
+                        width, height = img.size
+                        if width < 100 or height < 100:
+                            raise ValueError(
+                                f"Invalid dimensions: {width}x{height}"
+                            )
+                except Exception as verify_error:
                     if temp_path.exists():
                         temp_path.unlink()
-                    # Restore original if replacement failed midway (original was
-                    # renamed to backup but the upscaled rename did not complete).
-                    if backup_path.exists() and not wallpaper.path.exists():
-                        try:
-                            backup_path.rename(wallpaper.path)
-                        except OSError as restore_error:
-                            logger.error(
-                                "Failed to restore original from backup: %s",
-                                restore_error,
-                            )
-                    result = False, f"Failed to replace file: {e}"
+                    result = False, f"Upscaled image is invalid: {verify_error}"
                     self._finish_upscale(wallpaper, *result)
                     return result
 
-                new_size = wallpaper.path.stat().st_size
-                size_improvement = f"({original_size / 1024 / 1024:.1f} MB → {new_size / 1024 / 1024:.1f} MB)"
-                result = True, f"Upscaled 2x {size_improvement}"
+                # Move original to backup
+                wallpaper.path.rename(backup_path)
+                # Move upscaled to original location
+                temp_path.rename(wallpaper.path)
+                # Remove backup
+                backup_path.unlink()
+            except OSError as e:
+                if temp_path.exists():
+                    temp_path.unlink()
+                # Restore original if replacement failed midway (original was
+                # renamed to backup but the upscaled rename did not complete).
+                if backup_path.exists() and not wallpaper.path.exists():
+                    try:
+                        backup_path.rename(wallpaper.path)
+                    except OSError as restore_error:
+                        logger.error(
+                            "Failed to restore original from backup: %s",
+                            restore_error,
+                        )
+                result = False, f"Failed to replace file: {e}"
                 self._finish_upscale(wallpaper, *result)
                 return result
 
-            except asyncio.CancelledError:
-                if temp_path.exists():
-                    temp_path.unlink()
-                result = False, "Upscaling cancelled"
-                self._finish_upscale(wallpaper, *result)
-                raise
-            except Exception as e:
-                if temp_path.exists():
-                    temp_path.unlink()
-                result = False, str(e)
-                self._finish_upscale(wallpaper, *result)
-                raise
+            new_size = wallpaper.path.stat().st_size
+            size_improvement = f"({original_size / 1024 / 1024:.1f} MB → {new_size / 1024 / 1024:.1f} MB)"
+            result = True, f"Upscaled 2x {size_improvement}"
+            self._finish_upscale(wallpaper, *result)
+            return result
 
-        finally:
-            # This will be called by _finish_upscale
-            pass
+        except asyncio.CancelledError:
+            if temp_path.exists():
+                temp_path.unlink()
+            result = False, "Upscaling cancelled"
+            self._finish_upscale(wallpaper, *result)
+            raise
+        except Exception as e:
+            if temp_path.exists():
+                temp_path.unlink()
+            result = False, str(e)
+            self._finish_upscale(wallpaper, *result)
+            raise
 
     def _finish_upscale(self, wallpaper: LocalWallpaper, success: bool, message: str):
         """Handle completion of an upscaling operation."""

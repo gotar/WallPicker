@@ -1,7 +1,8 @@
-requests>=2.31.0
 Pillow>=10.0.0
 PyGObject>=3.46.0
 send2trash>=1.8.2
 aiohttp>=3.9.0
 rapidfuzz>=3.0.0
-clip-anytorch>=1.0.0
+
+# Optional: AI tagging via CLIP (install with: pip install -e ".[tagger]")
+# clip-anytorch>=1.0.0

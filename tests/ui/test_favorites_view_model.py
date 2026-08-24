@@ -71,7 +71,6 @@ class TestFavoritesViewModelInit:
 
 
 class TestFavoritesViewModelLoadFavorites:
-    @pytest.mark.asyncio
     async def test_load_favorites_success(self, favorites_view_model):
         await favorites_view_model.load_favorites()
 
@@ -80,13 +79,11 @@ class TestFavoritesViewModelLoadFavorites:
 
 
 class TestFavoritesViewModelSearchFavorites:
-    @pytest.mark.asyncio
     async def test_search_empty_query_loads_all(self, favorites_view_model):
         await favorites_view_model.search_favorites("")
 
         assert len(favorites_view_model.favorites) == 2
 
-    @pytest.mark.asyncio
     async def test_search_with_query_updates_results(self, favorites_view_model):
         await favorites_view_model.search_favorites("wallpaper_0")
 
@@ -96,7 +93,6 @@ class TestFavoritesViewModelSearchFavorites:
 
 
 class TestFavoritesViewModelAddFavorite:
-    @pytest.mark.asyncio
     async def test_add_favorite_success(self, favorites_view_model):
         result = await favorites_view_model.add_favorite(
             wallpaper_id="new_id",
@@ -111,7 +107,6 @@ class TestFavoritesViewModelAddFavorite:
 
 
 class TestFavoritesViewModelRemoveFavorite:
-    @pytest.mark.asyncio
     async def test_remove_favorite_by_id_success(self, favorites_view_model):
         result = await favorites_view_model.remove_favorite("wallpaper_0")
 
@@ -120,7 +115,6 @@ class TestFavoritesViewModelRemoveFavorite:
             "wallpaper_0"
         )
 
-    @pytest.mark.asyncio
     async def test_remove_favorite_accepts_favorite_object(self, favorites_view_model):
         await favorites_view_model.load_favorites()
         favorite = favorites_view_model.favorites[0]

@@ -22,14 +22,6 @@ def pytest_configure(config):
 
 
 @pytest.fixture
-def event_loop() -> asyncio.AbstractEventLoop:
-    """Create event loop for async tests."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-@pytest.fixture
 async def aiohttp_session(mocker: MockerFixture) -> AsyncGenerator:
     """Create aiohttp session mock for async tests."""
     from aiohttp import ClientResponse, ClientSession
@@ -57,18 +49,6 @@ def temp_dir(tmp_path: Path) -> Path:
     test_dir = tmp_path / "wallpicker_test"
     test_dir.mkdir(parents=True, exist_ok=True)
     yield test_dir
-
-
-@pytest.fixture
-def service_config(temp_dir: Path) -> object:
-    """ConfigService fixture for tests."""
-    from core.container import ServiceConfig
-
-    return ServiceConfig(
-        local_wallpapers_dir=temp_dir,
-        cache_dir=temp_dir / "cache",
-        config_file=temp_dir / "config.json",
-    )
 
 
 @pytest.fixture

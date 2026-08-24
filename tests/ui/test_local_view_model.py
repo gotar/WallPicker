@@ -58,7 +58,6 @@ class TestLocalViewModelInit:
 class TestLocalViewModelLoadWallpapers:
     """Test load_wallpapers method."""
 
-    @pytest.mark.asyncio
     async def test_load_wallpapers_success(self, local_view_model, mocker):
         """Test successful wallpaper loading."""
         await local_view_model.load_wallpapers()
@@ -66,7 +65,6 @@ class TestLocalViewModelLoadWallpapers:
         assert len(local_view_model.wallpapers) == 3
         assert local_view_model.is_busy is False
 
-    @pytest.mark.asyncio
     async def test_load_wallpapers_sets_busy(self, local_view_model):
         """Test that is_busy is managed during loading."""
         await local_view_model.load_wallpapers()
@@ -76,21 +74,18 @@ class TestLocalViewModelLoadWallpapers:
 class TestLocalViewModelSearchWallpapers:
     """Test search_wallpapers method."""
 
-    @pytest.mark.asyncio
     async def test_search_empty_query_loads_all(self, local_view_model):
         """Test that empty search loads all wallpapers."""
         await local_view_model.search_wallpapers("")
 
         assert len(local_view_model.wallpapers) == 3
 
-    @pytest.mark.asyncio
     async def test_search_with_query(self, local_view_model):
         """Test search with actual query."""
         await local_view_model.search_wallpapers("test")
 
         assert local_view_model.search_query == "test"
 
-    @pytest.mark.asyncio
     async def test_search_updates_wallpapers(self, local_view_model):
         """Test that search results update wallpapers list."""
         await local_view_model.search_wallpapers("test")
@@ -101,7 +96,6 @@ class TestLocalViewModelSearchWallpapers:
 class TestLocalViewModelDeleteWallpaper:
     """Test delete_wallpaper method."""
 
-    @pytest.mark.asyncio
     async def test_delete_wallpaper_success(self, local_view_model):
         """Test successful wallpaper deletion."""
         await local_view_model.load_wallpapers()
@@ -112,7 +106,6 @@ class TestLocalViewModelDeleteWallpaper:
         assert success is True
         assert "Deleted" in message
 
-    @pytest.mark.asyncio
     async def test_delete_removes_from_list(self, local_view_model):
         """Test that deleted wallpaper is removed from list."""
         await local_view_model.load_wallpapers()
@@ -127,7 +120,6 @@ class TestLocalViewModelDeleteWallpaper:
 class TestLocalViewModelRefresh:
     """Test refresh_wallpapers method."""
 
-    @pytest.mark.asyncio
     async def test_refresh_clears_search(self, local_view_model):
         """Test that refresh clears search query."""
         local_view_model.search_query = "test"
@@ -353,7 +345,6 @@ class TestLocalViewModelFiltering:
 class TestUpscaleReplaceFailure:
     """Test upscale replace-failure restores the original from backup (C2)."""
 
-    @pytest.mark.asyncio
     async def test_replace_failure_restores_original(
         self, local_view_model, tmp_path, mocker
     ):
@@ -565,7 +556,6 @@ class TestUpscaleTagQueues:
 class TestStaleResultDiscard:
     """Test generation-counter staleness guards (M14)."""
 
-    @pytest.mark.asyncio
     async def test_search_discards_stale_result(self, local_view_model, tmp_path, mocker):
         """A search finishing after a newer request started is discarded."""
         sentinel = [

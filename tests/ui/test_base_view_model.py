@@ -126,13 +126,15 @@ class TestCleanup:
     """Test cleanup methods."""
 
     def test_del_cleanup(self):
-        """Test __del__ cleanup succeeds."""
+        """Test cleanup leaves the ViewModel in a consistent state."""
         vm = MockBaseViewModel()
 
-        if hasattr(vm, "__del__"):
-            vm.__del__()
+        # BaseViewModel defines no __del__ of its own; triggering garbage
+        # collection of an instance must not raise and must not corrupt state.
+        vm.__del__() if hasattr(vm, "__del__") else None
 
-        assert True
+        assert isinstance(vm, BaseViewModel)
+        assert vm.is_busy is False
 
 
 class TestIntegrationBaseViewModel:

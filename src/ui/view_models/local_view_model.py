@@ -107,6 +107,9 @@ class LocalViewModel(BaseViewModel):
 
     def _set_wallpapers(self, wallpapers: list[LocalWallpaper]) -> bool:
         self._wallpapers = wallpapers
+        # Selection must only reference wallpapers that are still visible,
+        # otherwise select_all/selected_count operate on stale entries (L10).
+        self.prune_selection(wallpapers)
         self.notify("wallpapers")
         return False
 
@@ -207,6 +210,7 @@ class LocalViewModel(BaseViewModel):
         """Remove a wallpaper from the list (main thread only)."""
         if wallpaper in self._wallpapers:
             self._wallpapers.remove(wallpaper)
+            self.prune_selection(self._wallpapers)
             self.notify("wallpapers")
         return False
 

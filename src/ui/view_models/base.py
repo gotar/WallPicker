@@ -135,6 +135,18 @@ class BaseViewModel(GObject.Object):
         self.selected_count = len(self._selected_wallpapers_list)
         self.selection_mode = self.selected_count > 0
 
+    def prune_selection(self, valid_wallpapers: list) -> None:
+        """Drop selection entries that are no longer present in a wallpaper
+        list so selected_count can never exceed visible items (L10).
+
+        Args:
+            valid_wallpapers: The wallpapers that still exist.
+        """
+        self._selected_wallpapers_list = [
+            w for w in self._selected_wallpapers_list if w in valid_wallpapers
+        ]
+        self._update_selection_state()
+
     def toggle_selection(self, wallpaper) -> None:
         """Toggle wallpaper selection."""
         if wallpaper in self._selected_wallpapers_list:

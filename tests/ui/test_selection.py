@@ -161,6 +161,69 @@ class TestWallhavenViewModelSelection:
             assert wallpapers[0] in selected
 
 
+class TestSelectionPruning:
+    """Selection must never reference wallpapers that are no longer visible (L10)."""
+
+    async def test_delete_wallpaper_prunes_selection(
+        self, local_view_model, mock_local_service
+    ):
+        """Deleting a selected wallpaper shrinks the selection."""
+        await local_view_model.load_wallpapers()
+        remaining = local_view_model.wallpapers[1]
+        deleted = local_view_model.wallpapers[0]
+        local_view_model.toggle_selection(deleted)
+        local_view_model.toggle_selection(remaining)
+        assert local_view_model.selected_count == 2
+
+        success, _ = await local_view_model.delete_wallpaper(deleted)
+        assert success is True
+
+        assert local_view_model.selected_count == 1
+        assert local_view_model.get_selected_wallpapers() == [remaining]
+        assert deleted not in local_view_model.get_selected_wallpapers()
+
+    async def test_reload_drops_stale_selection_entries(
+        self, local_view_model, mock_local_service, tmp_path, mocker
+    ):
+        """Reloading with a different list drops selection entries that vanished."""
+        from services.local_service import LocalWallpaper
+
+        await local_view_model.load_wallpapers()
+        local_view_model.select_all()
+        old_count = len(local_view_model.wallpapers)
+        assert local_view_model.selected_count == old_count
+
+        fresh = [
+            LocalWallpaper(
+                path=tmp_path / "fresh.jpg",
+                filename="fresh.jpg",
+                size=42,
+                modified_time=1.0,
+                tags=[],
+            )
+        ]
+        mock_local_service.get_wallpapers_async = mocker.AsyncMock(return_value=fresh)
+
+        await local_view_model.load_wallpapers()
+
+        # Old wallpaper objects are gone from view; stale entries must drop.
+        assert local_view_model.get_selected_wallpapers() == []
+        assert local_view_model.selected_count == 0
+
+    def test_select_all_still_works_after_reload(
+        self, local_view_model, mock_local_service
+    ):
+        """select_all keeps operating on the current wallpaper list (L10)."""
+        local_view_model._set_wallpapers(local_view_model.local_service
+                                         .get_wallpapers_async.return_value)
+
+        local_view_model.select_all()
+
+        assert (
+            local_view_model.selected_count == len(local_view_model.wallpapers) == 3
+        )
+
+
 class TestFavoritesViewModelSelection:
     """Test selection functionality in FavoritesViewModel."""
 

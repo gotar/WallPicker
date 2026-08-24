@@ -56,8 +56,6 @@ class LocalView(Adw.BreakpointBin):
         self._metadata_labels = {}
         self._tags_labels = {}
         self._pictures = {}  # path -> Gtk.Picture, for single-card refresh (H2)
-        self._pending_upscale_paths = set()  # paths with in-flight upscale (M13)
-        self._pending_tag_paths = set()  # paths with in-flight tagging (M13)
 
         # Pagination state
         self._all_wallpapers = []  # Current view (may be filtered)
@@ -919,7 +917,6 @@ class LocalView(Adw.BreakpointBin):
     def _on_upscale_wallpaper(self, button, wallpaper):
         success, message = self.view_model.queue_upscale(wallpaper)
         if success:
-            self._pending_upscale_paths.add(str(wallpaper.path))
             card = self._wallpaper_card_map.get(wallpaper)
             if card:
                 self._show_upscale_overlay(card)
@@ -932,7 +929,6 @@ class LocalView(Adw.BreakpointBin):
     def _on_generate_tags(self, button, wallpaper):
         success, message = self.view_model.queue_generate_tags(wallpaper)
         if success:
-            self._pending_tag_paths.add(str(wallpaper.path))
             card = self._wallpaper_card_map.get(wallpaper)
             if card:
                 self._show_tag_overlay(card)
@@ -992,7 +988,6 @@ class LocalView(Adw.BreakpointBin):
         self, view_model, success: bool, message: str, wallpaper_path: str
     ):
         """Handle tagging completion for exactly the card that queued the work."""
-        self._pending_tag_paths.discard(wallpaper_path)
         # Only touch the overlay of the matching card - never a first-match
         # fallback that would leave the real card's spinner stuck (M13).
         card = self._path_card_map.get(wallpaper_path)
@@ -1069,7 +1064,6 @@ class LocalView(Adw.BreakpointBin):
         self, view_model, success: bool, message: str, wallpaper_path: str
     ):
         """Handle upscaling completion for exactly the card that queued the work."""
-        self._pending_upscale_paths.discard(wallpaper_path)
         # Only touch the overlay of the matching card - never a first-match
         # fallback that would hide the wrong card's spinner (M13).
         card = self._path_card_map.get(wallpaper_path)

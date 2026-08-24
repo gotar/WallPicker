@@ -267,15 +267,15 @@ WallPicker automatically manages thumbnail caching:
 
 ## Wallpaper Setting Mechanism
 
-WallPicker sets wallpapers using a symlink-based approach:
+On Omarchy, WallPicker integrates with the desktop's own background pipeline:
 
-1. Creates a symbolic link at `~/.cache/current_wallpaper` pointing to the selected wallpaper
-2. Invokes `awww` for animated transitions (or a fallback command)
-
-Example transition command:
-```bash
-awww ~/.cache/current_wallpaper --transition-type outer --transition-duration 1
-```
+1. Delegates to `omarchy-theme-bg-set <image>`, which updates the canonical
+   symlink `~/.local/state/omarchy/current/background` and notifies the running
+   shell over IPC — the shell renders the background itself (no double-draw).
+2. The legacy link `~/.config/omarchy/current/background` is kept in sync for
+   older consumers.
+3. On non-Omarchy systems it falls back to driving `awww` directly
+   (auto-starting `awww-daemon` if needed), with animated transitions.
 
 ## Project Structure
 
@@ -317,6 +317,20 @@ python -m pytest tests/ui/test_favorites_view_model.py
 ### Contributing
 
 Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
+
+### Workflow & conventions
+
+Development follows a fixed loop documented in [AGENTS.md](AGENTS.md)
+("GENERAL TASK WORKFLOW"):
+
+1. Task idea → 2. automatic self-grill for ambiguity (`grill-me` skill) →
+3. TDD implementation (failing test first; test+fix in one atomic commit) →
+4. parallel worktree lanes with disjoint file claims for larger work →
+5. independent review loop until clean → 6. version sync across packaging
+files, tag push and AUR publish via `./aur-push.sh`.
+
+Tests must stay green (`python -m pytest tests/`) and `ruff check .` clean at
+every commit.
 
 ## License
 

@@ -82,7 +82,56 @@ Wallpaper picker with multi-source support (Wallhaven API + local files). Featur
 ## CONFIGURATION
 - **Config**: `~/.config/wallpicker/config.json`
 - **Cache**: `~/.cache/wallpicker/` (Thumbnails, Logs)
-- **Wallpaper Setting**: Symlink at `~/.cache/current_wallpaper` + `awww`
+- **Wallpaper Setting**: canonical omarchy state symlink
+`~/.local/state/omarchy/current/background` via `omarchy-theme-bg-set`
+(awww fallback; legacy `~/.config/omarchy/current/background` kept in sync)
+
+## GENERAL TASK WORKFLOW
+
+Every non-trivial task follows this loop, in order:
+
+1. **General idea** — one-paragraph statement of the task: what changes for the
+   user, which areas of the repo are touched.
+2. **Grill me (automatic)** — run the `grill-me` skill: self-interrogate scope,
+   edge cases, acceptance criteria, compatibility and rollout. Produce a frozen
+   Q&A ledger; every answer tagged `[repo]` (cite file:line) or `[default]`
+   (safest reversible assumption). No user round-trip.
+3. **TDD implementation** — per bug/feature:
+   - write the failing test first (see red),
+   - minimal implementation to green,
+   - test + fix in ONE atomic commit:
+     `fix(<scope>): <what+why> (review <ID>)` / `feat(<scope>): ...` /
+     `test(<scope>): ...`.
+   Suite (`pytest`) and `ruff` must be green before every commit. Never run
+   potentially-hanging commands without a `timeout` prefix.
+4. **Worktrees & subagents** — parallel work uses managed git worktree lanes
+   (one writer per worktree), each lane with DISJOINT file claims recorded in a
+   lane board before launch, gated on pytest+ruff, reporting its branch/commits.
+   Shared seams (same file touched by two concerns) stay in ONE sequential lane.
+   A fresh-context read-only reviewer verifies merged results afterwards.
+5. **Review loop** — after implementation, an independent review pass verifies
+   every item semantically (not superficially) and hunts for regressions the
+   diff introduced. Findings loop back to step 3 until zero remain.
+6. **Commit, push, publish** — when the loop is done:
+   - sync version across `pyproject.toml`, `PKGBUILD`, `.SRCINFO`,
+     `aur/PKGBUILD`, `aur/.SRCINFO` (ALL five must agree, including the
+     `#tag=vX.Y.Z` source lines) and add a CHANGELOG entry,
+   - commit `chore(release): bump version to X.Y.Z`, tag `vX.Y.Z`,
+   - `git push origin master --tags` (AUR PKGBUILD builds from that GitHub tag),
+   - publish to AUR with `./aur-push.sh` (clones
+     `aur@aur.archlinux.org:wallpicker.git`, copies `aur/PKGBUILD` +
+     `aur/.SRCINFO`, commits "Update to vX.Y.Z", pushes).
+
+## WALLPAPER SETTING (omarchy integration)
+
+The omarchy shell renders the desktop background from the canonical symlink
+`~/.local/state/omarchy/current/background`; it does NOT need a compositor
+wallpaper drawn underneath. WallPicker integrates via `omarchy-theme-bg-set`
+(which updates that link and notifies the shell over IPC) — see
+`src/services/wallpaper_setter.py`. Direct `awww img` calls are only a
+fallback for non-omarchy systems; calling them on top of the shell path draws
+a second wallpaper layered over the theme's. Legacy link
+`~/.config/omarchy/current/background` is kept in sync for old consumers only.
 
 ## COMMANDS
 ```bash
@@ -99,6 +148,6 @@ mypy src/
 ```
 
 ## DEPENDENCIES
-- **Runtime**: `PyGObject`, `aiohttp`, `requests`, `Pillow`, `rapidfuzz`, `send2trash`
-- **Dev**: `pytest`, `pytest-asyncio`, `pytest-cov`, `ruff`, `black`, `mypy`
-- **Optional**: `awww` (animated transitions), `waifu2x-ncnn-vulkan` (AI upscaling)
+- **Runtime**: `PyGObject`, `aiohttp`, `Pillow`, `rapidfuzz`, `send2trash`
+- **Dev**: `pytest`, `pytest-asyncio`, `pytest-cov`, `ruff`, `mypy`
+- **Optional**: `awww` (animated transitions), `waifu2x-ncnn-vulkan` (AI upscaling), `clip-anytorch` (AI tagging)

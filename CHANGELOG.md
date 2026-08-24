@@ -26,8 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for queue completion overlays
 
 ### Changed
-- Packaging: version unified at 2.5.4 across pyproject.toml, PKGBUILD and
-  .SRCINFO; removed unused `requests` dependency; `clip-anytorch` is now an
+- Packaging: version synced to 2.5.5 across pyproject.toml, PKGBUILD and
+  both .SRCINFO files; removed unused `requests` dependency; `clip-anytorch` is now an
   optional `[tagger]` extra; install.sh creates a dedicated virtualenv
   (PEP 668-safe) and patches the correct desktop-entry Exec/Icon lines
 - Hygiene: removed dead code (`main.py`, unused `WallpaperCard` component,

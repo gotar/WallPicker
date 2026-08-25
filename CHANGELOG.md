@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-08-25
+
+### Changed
+- Default Wallhaven sorting is now Newest (date_added), matching the filter
+  bar's visible selection; previously the UI showed Newest while searching
+  the toplist silently
+- Toplist searches without an explicit Top Range now use a 1-year range;
+  narrow filters (e.g. 21:9 ultrawide) went from ~35 to ~540 results
+- Pagination bar shows an advisory hint when a toplist search yields fewer
+  than 100 total wallpapers, suggesting a different sorting
+
 ## [2.6.2] - 2026-08-24
 
 ### Changed

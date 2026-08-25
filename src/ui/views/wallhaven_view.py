@@ -19,6 +19,26 @@ from ui.view_models.wallhaven_view_model import WallhavenViewModel  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
+# Below this many total results, toplist searches get a hint suggesting a
+# different sorting - Wallhaven's toplist covers a short window, so narrow
+# filters (e.g. ultrawide ratios) can return only a couple of pages.
+FEW_RESULTS_THRESHOLD = 100
+
+
+def few_results_hint(sorting: str, total_wallpapers: int) -> str:
+    """Return an advisory line for sparse toplist result sets (pure function).
+
+    Returns an empty string when no hint applies.
+    """
+    if sorting != "toplist":
+        return ""
+    if total_wallpapers <= 0 or total_wallpapers >= FEW_RESULTS_THRESHOLD:
+        return ""
+    return (
+        f"Tip: toplist found only {total_wallpapers:,} wallpapers - "
+        "try a different sorting (e.g. Newest) for more results"
+    )
+
 
 class WallhavenView(Adw.Bin):
     """View for Wallhaven wallpaper browsing with adaptive layout"""
@@ -603,16 +623,19 @@ class WallhavenView(Adw.Bin):
     def update_pagination(self, current_page: int, total_pages: int):
         wallpaper_count = len(self.view_model.wallpapers)
         total_wallpapers = self.view_model.total_wallpapers
+        hint = few_results_hint(self.view_model.sorting, total_wallpapers)
 
         if total_wallpapers > 0:
-            self.page_label.set_text(
+            text = (
                 f"Page {current_page} / {total_pages} - {wallpaper_count} wallpapers "
                 f"(Total: {total_wallpapers:,})"
             )
         else:
-            self.page_label.set_text(
-                f"Page {current_page} / {total_pages} - {wallpaper_count} wallpapers"
-            )
+            text = f"Page {current_page} / {total_pages} - {wallpaper_count} wallpapers"
+
+        if hint:
+            text = f"{text}\n{hint}"
+        self.page_label.set_text(text)
 
         is_busy = self.view_model.is_busy
         self.prev_btn.set_sensitive(current_page > 1 and not is_busy)

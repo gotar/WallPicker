@@ -19,7 +19,7 @@ class TestWallhavenViewModelInit:
         assert wallhaven_view_model.search_query == ""
         assert wallhaven_view_model.category == "111"
         assert wallhaven_view_model.purity == "100"
-        assert wallhaven_view_model.sorting == "toplist"
+        assert wallhaven_view_model.sorting == "date_added"
         assert wallhaven_view_model.order == "desc"
         assert wallhaven_view_model.resolution == ""
 
@@ -52,6 +52,38 @@ class TestWallhavenViewModelSearchWallpapers:
         assert wallhaven_view_model.category == "100"
         assert wallhaven_view_model.purity == "110"
         assert wallhaven_view_model.sorting == "random"
+
+    async def test_toplist_without_range_expands_to_one_year(
+        self, wallhaven_view_model, mock_wallhaven_service
+    ):
+        """Toplist with no explicit range uses 1y (API default is too narrow)."""
+        await wallhaven_view_model.search_wallpapers(sorting="toplist")
+
+        _, kwargs = mock_wallhaven_service.search.call_args
+        assert kwargs["sorting"] == "toplist"
+        assert kwargs["top_range"] == "1y"
+
+    async def test_toplist_explicit_range_not_overridden(
+        self, wallhaven_view_model, mock_wallhaven_service
+    ):
+        """An explicitly chosen Top Range is passed through unchanged."""
+        await wallhaven_view_model.search_wallpapers(
+            sorting="toplist", top_range="1w"
+        )
+
+        _, kwargs = mock_wallhaven_service.search.call_args
+        assert kwargs["top_range"] == "1w"
+
+    async def test_non_toplist_sorting_keeps_empty_range(
+        self, wallhaven_view_model, mock_wallhaven_service
+    ):
+        """The range expansion applies to toplist sorting only."""
+        wallhaven_view_model.sorting = "date_added"
+
+        await wallhaven_view_model.search_wallpapers()
+
+        _, kwargs = mock_wallhaven_service.search.call_args
+        assert kwargs["top_range"] == ""
 
     async def test_search_error_handling(
         self, wallhaven_view_model, mock_wallhaven_service

@@ -47,7 +47,7 @@ class WallhavenViewModel(BaseViewModel):
         self._search_query = ""
         self._category = "111"
         self._purity = "100"
-        self._sorting = "toplist"
+        self._sorting = "date_added"
         self._order = "desc"
         self._resolution = ""
         self._top_range = ""
@@ -231,7 +231,7 @@ class WallhavenViewModel(BaseViewModel):
         page: int = 1,
         category: str = "111",
         purity: str = "100",
-        sorting: str = "toplist",
+        sorting: str = "date_added",
         order: str = "desc",
         resolution: str = "",
         top_range: str = "",
@@ -274,6 +274,14 @@ class WallhavenViewModel(BaseViewModel):
                     f"Starting search: query='{query}', category={category}, page={page}"
                 )
 
+                # Wallhaven's toplist defaults to roughly the last month, which
+                # yields very few results for narrow filters (e.g. ratios=21x9
+                # -> ~35 total). Widen an unset range to one year; an explicit
+                # user choice is always passed through unchanged.
+                effective_top_range = top_range or (
+                    "1y" if sorting == "toplist" else ""
+                )
+
                 wallpapers, meta = await self.wallhaven_service.search(
                     query=query,
                     page=page,
@@ -282,7 +290,7 @@ class WallhavenViewModel(BaseViewModel):
                     sorting=sorting,
                     order=order,
                     atleast=resolution,
-                    top_range=top_range,
+                    top_range=effective_top_range,
                     ratios=ratios,
                     colors=colors,
                     resolutions=resolutions,

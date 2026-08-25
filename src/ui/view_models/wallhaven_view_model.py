@@ -118,7 +118,7 @@ class WallhavenViewModel(BaseViewModel):
     def purity(self, value: str) -> None:
         self._purity = value
 
-    @GObject.Property(type=str, default="toplist")
+    @GObject.Property(type=str, default="date_added")
     def sorting(self) -> str:
         return self._sorting
 

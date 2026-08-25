@@ -62,6 +62,8 @@ class TestWallhavenViewModelSearchWallpapers:
         _, kwargs = mock_wallhaven_service.search.call_args
         assert kwargs["sorting"] == "toplist"
         assert kwargs["top_range"] == "1y"
+        # The coercion must not mutate the user-facing property.
+        assert wallhaven_view_model.top_range == ""
 
     async def test_toplist_explicit_range_not_overridden(
         self, wallhaven_view_model, mock_wallhaven_service

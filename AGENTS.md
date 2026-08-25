@@ -112,6 +112,9 @@ Every non-trivial task follows this loop, in order:
 5. **Review loop** — after implementation, an independent review pass verifies
    every item semantically (not superficially) and hunts for regressions the
    diff introduced. Findings loop back to step 3 until zero remain.
+   - **Visual changes require a visual review pass:** render the real widgets
+     (actual view + driven state, screenshot) and attach the capture to the
+     reviewer; the reviewer's approval is mandatory before publish.
 6. **Commit, push, publish** — when the loop is done:
    - sync version across `pyproject.toml`, `PKGBUILD`, `.SRCINFO`,
      `aur/PKGBUILD`, `aur/.SRCINFO` (ALL five must agree, including the

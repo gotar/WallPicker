@@ -44,4 +44,17 @@ git push
 cd -
 rm -rf "$TMP_DIR"
 
-echo "✅ Successfully pushed v$VERSION to AUR!"
+# Ensure a matching GitHub Release exists (AUR PKGBUILD builds from the tag)
+if gh release view "v$VERSION" >/dev/null 2>&1; then
+  echo "✅ GitHub release v$VERSION already exists"
+else
+  echo "🏷️  Creating GitHub release v$VERSION..."
+  NOTES=$(awk -v pat="^## [$VERSION]" 'BEGIN{p=0} $0 ~ pat {p=1; next} p && /^## \[/{exit} p{print}' CHANGELOG.md | sed '/./,$!d')
+  if [ -n "$NOTES" ]; then
+    gh release create "v$VERSION" --title "v$VERSION" --notes "$NOTES"
+  else
+    gh release create "v$VERSION" --title "v$VERSION" --generate-notes
+  fi
+fi
+
+echo "✅ Successfully pushed v$VERSION to AUR + GitHub!"

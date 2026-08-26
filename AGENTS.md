@@ -121,6 +121,8 @@ Every non-trivial task follows this loop, in order:
      `#tag=vX.Y.Z` source lines) and add a CHANGELOG entry,
    - commit `chore(release): bump version to X.Y.Z`, tag `vX.Y.Z`,
    - `git push origin master --tags` (AUR PKGBUILD builds from that GitHub tag),
+   - create the GitHub Release for `vX.Y.Z` (`gh release create` — `aur-push.sh`
+     does this automatically if missing; never leave tags without a Release),
    - publish to AUR with `./aur-push.sh` (clones
      `aur@aur.archlinux.org:wallpicker.git`, copies `aur/PKGBUILD` +
      `aur/.SRCINFO`, commits "Update to vX.Y.Z", pushes).

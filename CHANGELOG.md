@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.2] - 2026-08-29
+
+### Fixed
+- Wallhaven wheel pagination is now bidirectional: wheel-down at bottom -> next page, wheel-up at top (threshold 10px) -> previous page (both debounced); fixes "scroll up nie cofa paginacji" in 2nd tab
+
 ## [2.7.1] - 2026-08-29
 
 ### Fixed

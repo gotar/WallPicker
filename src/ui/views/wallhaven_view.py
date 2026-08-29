@@ -340,10 +340,7 @@ class WallhavenView(Adw.Bin):
             GLib.timeout_add(1000, self._reset_refresh_flag)
 
     def _on_scroll(self, controller, dx, dy):
-        """Handle scroll snap for pagination (down only; up never paginates)."""
-        # Only paginate when scrolling down; mouse-wheel up must not go to prev page
-        if dy <= 0:
-            return False
+        """Handle scroll pagination: down at bottom -> next, up at top -> prev."""
         if self.view_model.is_busy or self._scroll_load_pending:
             return False
 
@@ -352,9 +349,17 @@ class WallhavenView(Adw.Bin):
         value = vadj.get_value()
         upper = vadj.get_upper()
 
-        # At bottom of scroll - load next page on scroll-down only (debounced)
+        # Wheel-up at top -> previous page (debounced)
+        if dy < 0 and value <= 10 and self.view_model.current_page > 1:
+            self._scroll_load_pending = True
+            self._run_async(self.view_model.load_prev_page())
+            GLib.timeout_add(1500, self._clear_scroll_load_pending)
+            return False
+
+        # Wheel-down at bottom -> next page (debounced)
         if (
-            value + page_size >= upper - 10
+            dy > 0
+            and value + page_size >= upper - 10
             and self.view_model.current_page < self.view_model.total_pages
         ):
             self._scroll_load_pending = True

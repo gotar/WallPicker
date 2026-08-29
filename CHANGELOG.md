@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-08-29
+
+### Fixed
+- Wallhaven infinite scroll now paginates only on mouse-wheel down; wheel-up at the bottom no longer triggers next-page and never navigates to the previous page (prev-page remains via button/keyboard only)
+
 ## [2.7.0] - 2026-08-25
 
 ### Changed

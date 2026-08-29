@@ -340,16 +340,19 @@ class WallhavenView(Adw.Bin):
             GLib.timeout_add(1000, self._reset_refresh_flag)
 
     def _on_scroll(self, controller, dx, dy):
-        """Handle scroll snap for pagination."""
+        """Handle scroll snap for pagination (down only; up never paginates)."""
+        # Only paginate when scrolling down; mouse-wheel up must not go to prev page
+        if dy <= 0:
+            return False
         if self.view_model.is_busy or self._scroll_load_pending:
-            return
+            return False
 
         vadj = self.scroll.get_vadjustment()
         page_size = vadj.get_page_size()
         value = vadj.get_value()
         upper = vadj.get_upper()
 
-        # At bottom of scroll - load next page (debounced)
+        # At bottom of scroll - load next page on scroll-down only (debounced)
         if (
             value + page_size >= upper - 10
             and self.view_model.current_page < self.view_model.total_pages
@@ -357,6 +360,8 @@ class WallhavenView(Adw.Bin):
             self._scroll_load_pending = True
             self._run_async(self.view_model.load_next_page())
             GLib.timeout_add(1500, self._clear_scroll_load_pending)
+            return False
+        return False
 
     def _clear_scroll_load_pending(self):
         """Reset infinite-scroll debounce guard."""

@@ -203,6 +203,9 @@ class SearchFilterBar(Gtk.Box):
         self.purity_sfw = Gtk.CheckButton(label="SFW")
         self.purity_sketchy = Gtk.CheckButton(label="Sketchy")
         self.purity_nsfw = Gtk.CheckButton(label="NSFW")
+        # Default SFW+Sketchy (110) for more diverse results
+        self.purity_sfw.set_active(True)
+        self.purity_sketchy.set_active(True)
 
         purity_box.append(self.purity_sfw)
         purity_box.append(self.purity_sketchy)

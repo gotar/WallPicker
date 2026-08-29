@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+import random
+import string
 import sys
 from pathlib import Path
 
@@ -19,6 +21,20 @@ from services.wallhaven_service import WallhavenService  # noqa: E402
 from ui.view_models.base import BaseViewModel  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+# Tags used to diversify empty-query searches so results are not monothematic.
+_DIVERSE_TAGS = [
+    "nature", "landscape", "city", "abstract", "minimal", "space",
+    "forest", "ocean", "mountains", "cyberpunk", "vintage", "dark",
+    "anime", "neon", "sunset",
+]
+
+_DIVERSE_SORTS = ["random", "favorites", "views", "toplist"]
+
+
+def _random_seed(length: int = 6) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(random.choice(alphabet) for _ in range(length))
 
 
 class WallhavenViewModel(BaseViewModel):
@@ -46,7 +62,7 @@ class WallhavenViewModel(BaseViewModel):
         self._total_wallpapers = 0
         self._search_query = ""
         self._category = "111"
-        self._purity = "100"
+        self._purity = "110"
         self._sorting = "date_added"
         self._order = "desc"
         self._resolution = ""
@@ -110,7 +126,7 @@ class WallhavenViewModel(BaseViewModel):
     def category(self, value: str) -> None:
         self._category = value
 
-    @GObject.Property(type=str, default="100")
+    @GObject.Property(type=str, default="110")
     def purity(self) -> str:
         return self._purity
 
@@ -213,7 +229,7 @@ class WallhavenViewModel(BaseViewModel):
             query=self.search_query,
             page=1,
             category=self.category,
-            purity="100",
+            purity=self.purity or "110",
             sorting=self.sorting,
             order="desc",
             resolution="",
@@ -230,7 +246,7 @@ class WallhavenViewModel(BaseViewModel):
         query: str = "",
         page: int = 1,
         category: str = "111",
-        purity: str = "100",
+        purity: str = "110",
         sorting: str = "date_added",
         order: str = "desc",
         resolution: str = "",
@@ -273,6 +289,42 @@ class WallhavenViewModel(BaseViewModel):
                 logger.debug(
                     f"Starting search: query='{query}', category={category}, page={page}"
                 )
+
+                # Diversify empty queries: bare date_added with no filters is
+                # monothematic (same newest 30). Inject a random tag or random
+                # sorting so Wallhaven 2nd tab feels varied.
+                diverse_query = query
+                diverse_sorting = sorting
+                diverse_seed = seed
+                diverse_top_range = top_range
+                no_advanced = not any([ratios, colors, resolutions, resolution, top_range])
+                if not query.strip() and no_advanced and sorting == "date_added" and page == 1:
+                    # 60% random tag, 30% random sorting, 10% keep as-is
+                    roll = random.random()
+                    if roll < 0.6:
+                        diverse_query = random.choice(_DIVERSE_TAGS)
+                        logger.info(f"Diversifying empty search with tag: {diverse_query}")
+                    elif roll < 0.9:
+                        diverse_sorting = random.choice(_DIVERSE_SORTS)
+                        if diverse_sorting == "random":
+                            diverse_seed = _random_seed()
+                        if diverse_sorting == "toplist" and not top_range:
+                            diverse_top_range = "1w"
+                        logger.info(f"Diversifying empty search with sorting: {diverse_sorting}")
+
+                # Persist diversified params for pagination continuity
+                if diverse_query != query:
+                    self._set_property_idle("search_query", diverse_query)
+                    query = diverse_query
+                if diverse_sorting != sorting:
+                    self._set_property_idle("sorting", diverse_sorting)
+                    sorting = diverse_sorting
+                if diverse_seed != seed:
+                    self._set_property_idle("seed", diverse_seed)
+                    seed = diverse_seed
+                if diverse_top_range != top_range:
+                    self._set_property_idle("top_range", diverse_top_range)
+                    top_range = diverse_top_range
 
                 # Wallhaven's toplist defaults to roughly the last month, which
                 # yields very few results for narrow filters (e.g. ratios=21x9
